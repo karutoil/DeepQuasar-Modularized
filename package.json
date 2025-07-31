@@ -1,0 +1,54 @@
+{
+  "name": "modular-discord-bot",
+  "version": "0.1.0",
+  "description": "Fully modular Discord.js bot with isolated core, dynamic plugin modules, hot reload, CLI scaffolder, and Docker support.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "import": "./core/index.js",
+      "require": "./core/index.cjs"
+    }
+  },
+  "bin": {
+    "scaffold-module": "./bin/scaffold-module.js"
+  },
+  "scripts": {
+    "dev": "node index.js",
+    "start": "node index.js",
+    "scaffold": "node bin/scaffold-module.js",
+    "lint": "echo \"No linter configured\"",
+    "prepare": "node -e \"\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "commander": "^11.1.0",
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "mongodb": "^6.8.0",
+    "node-cron": "^3.0.3",
+    "undici": "^6.19.8",
+    "winston": "^3.13.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "discord",
+    "discord.js",
+    "bot",
+    "modular",
+    "plugins",
+    "hot-reload"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://example.com/your-repo.git"
+  },
+  "author": "Your Name"
+}
