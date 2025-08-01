@@ -1,6 +1,7 @@
 /**
  * Unified interaction registries and dispatcher.
  * Supports: buttons, select menus, modals, user/message context menus.
+ * v2 enhancement: optional prefix-based lookup to support scoped customIds.
  */
 import {
   InteractionType,
@@ -15,6 +16,11 @@ export function createInteractions(client, logger) {
   const userCtxByModule = new Map(); // module -> Map(commandName -> handler)
   const msgCtxByModule = new Map();  // module -> Map(commandName -> handler)
 
+  // v2: allow prefix registrations for dynamic customIds (e.g., extras appended)
+  const buttonPrefixesByModule = new Map(); // module -> Map(prefix -> handler)
+  const selectPrefixesByModule = new Map(); // module -> Map(prefix -> handler)
+  const modalPrefixesByModule = new Map();  // module -> Map(prefix -> handler)
+
   // Convenience accessors
   const ensure = (map, moduleName) => {
     let inner = map.get(moduleName);
@@ -22,19 +28,34 @@ export function createInteractions(client, logger) {
     return inner;
   };
 
-  function registerButton(moduleName, customId, handler) {
+  function registerButton(moduleName, customId, handler, { prefix = false } = {}) {
+    if (prefix) {
+      const map = ensure(buttonPrefixesByModule, moduleName);
+      map.set(customId, handler);
+      return () => map.delete(customId);
+    }
     const map = ensure(buttonsByModule, moduleName);
     map.set(customId, handler);
     return () => map.delete(customId);
   }
 
-  function registerSelect(moduleName, customId, handler) {
+  function registerSelect(moduleName, customId, handler, { prefix = false } = {}) {
+    if (prefix) {
+      const map = ensure(selectPrefixesByModule, moduleName);
+      map.set(customId, handler);
+      return () => map.delete(customId);
+    }
     const map = ensure(selectsByModule, moduleName);
     map.set(customId, handler);
     return () => map.delete(customId);
   }
 
-  function registerModal(moduleName, customId, handler) {
+  function registerModal(moduleName, customId, handler, { prefix = false } = {}) {
+    if (prefix) {
+      const map = ensure(modalPrefixesByModule, moduleName);
+      map.set(customId, handler);
+      return () => map.delete(customId);
+    }
     const map = ensure(modalsByModule, moduleName);
     map.set(customId, handler);
     return () => map.delete(customId);
@@ -58,6 +79,23 @@ export function createInteractions(client, logger) {
     modalsByModule.delete(moduleName);
     userCtxByModule.delete(moduleName);
     msgCtxByModule.delete(moduleName);
+    buttonPrefixesByModule.delete(moduleName);
+    selectPrefixesByModule.delete(moduleName);
+    modalPrefixesByModule.delete(moduleName);
+  }
+
+  function findByExactOrPrefix(id, maps, prefixMaps) {
+    for (const map of maps.values()) {
+      const h = map.get(id);
+      if (h) return h;
+    }
+    // prefix scan: try each registered prefix across modules
+    for (const pmap of prefixMaps.values()) {
+      for (const [prefix, h] of pmap.entries()) {
+        if (id.startsWith(prefix)) return h;
+      }
+    }
+    return null;
   }
 
   async function dispatch(interaction) {
@@ -82,30 +120,24 @@ export function createInteractions(client, logger) {
       // Buttons
       if (interaction.isButton?.()) {
         const id = interaction.customId;
-        for (const map of buttonsByModule.values()) {
-          const h = map.get(id);
-          if (h) return await h(interaction);
-        }
+        const h = findByExactOrPrefix(id, buttonsByModule, buttonPrefixesByModule);
+        if (h) return await h(interaction);
         return;
       }
 
       // Select menus (string, user, role, channel, mentionable)
       if (interaction.isAnySelectMenu?.()) {
         const id = interaction.customId;
-        for (const map of selectsByModule.values()) {
-          const h = map.get(id);
-          if (h) return await h(interaction);
-        }
+        const h = findByExactOrPrefix(id, selectsByModule, selectPrefixesByModule);
+        if (h) return await h(interaction);
         return;
       }
 
       // Modals
       if (interaction.type === InteractionType.ModalSubmit) {
         const id = interaction.customId;
-        for (const map of modalsByModule.values()) {
-          const h = map.get(id);
-          if (h) return await h(interaction);
-        }
+        const h = findByExactOrPrefix(id, modalsByModule, modalPrefixesByModule);
+        if (h) return await h(interaction);
         return;
       }
     } catch (err) {

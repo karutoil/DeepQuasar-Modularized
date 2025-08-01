@@ -18,6 +18,9 @@ export function createCommandHandler(client, logger, config) {
   const allHandlers = new Set();
   let interactionWired = false;
 
+  // v2: centralized slash/autocomplete router per command name
+  const v2Routers = new Map(); // commandName -> { execute?: fn, autocomplete?: Map<option, fn> }
+
   // Cache of last deployed hashes to compute deltas on subsequent installs
   let lastDeployedHashes = new Map(); // name -> hash
 
@@ -42,6 +45,20 @@ export function createCommandHandler(client, logger, config) {
     return list.length;
   }
 
+  // v2 registration helpers used by builder to attach centralized routes
+  function v2RegisterExecute(commandName, fn) {
+    let r = v2Routers.get(commandName);
+    if (!r) { r = { execute: null, autocomplete: new Map() }; v2Routers.set(commandName, r); }
+    r.execute = fn;
+    return () => { const cur = v2Routers.get(commandName); if (cur) cur.execute = null; };
+  }
+  function v2RegisterAutocomplete(commandName, optionName, fn) {
+    let r = v2Routers.get(commandName);
+    if (!r) { r = { execute: null, autocomplete: new Map() }; v2Routers.set(commandName, r); }
+    r.autocomplete.set(optionName, fn);
+    return () => { const cur = v2Routers.get(commandName); if (cur) cur.autocomplete.delete(optionName); };
+  }
+
   function onInteractionCreate(moduleName, handler) {
     let set = handlersByModule.get(moduleName);
     if (!set) {
@@ -54,13 +71,41 @@ export function createCommandHandler(client, logger, config) {
     if (!interactionWired) {
       interactionWired = true;
       client.on("interactionCreate", async (interaction) => {
-        if (!interaction.isChatInputCommand?.() && !interaction.isContextMenuCommand?.()) return;
-        for (const h of Array.from(allHandlers)) {
-          try {
-            await h(interaction);
-          } catch (err) {
-            logger.error(`Interaction handler error: ${err?.message}`, { stack: err?.stack });
+        try {
+          // v2: centralized routing first
+          if (interaction.isChatInputCommand?.() === true) {
+            const name = interaction.commandName;
+            const r = v2Routers.get(name);
+            if (r?.execute) {
+              try { await r.execute(interaction); } catch (err) {
+                logger.error(`v2 execute error for /${name}: ${err?.message}`, { stack: err?.stack });
+              }
+            }
+          } else if (interaction.isAutocomplete?.() === true) {
+            const name = interaction.commandName;
+            const r = v2Routers.get(name);
+            if (r) {
+              const focused = interaction.options.getFocused(true);
+              const fn = r.autocomplete.get(focused?.name);
+              if (fn) {
+                try { await fn(interaction); } catch (err) {
+                  logger.error(`v2 autocomplete error for /${name} ${focused?.name}: ${err?.message}`, { stack: err?.stack });
+                }
+              }
+            }
           }
+
+          // Legacy/compat routing
+          if (!interaction.isChatInputCommand?.() && !interaction.isContextMenuCommand?.()) return;
+          for (const h of Array.from(allHandlers)) {
+            try {
+              await h(interaction);
+            } catch (err) {
+              logger.error(`Interaction handler error: ${err?.message}`, { stack: err?.stack });
+            }
+          }
+        } catch (err) {
+          logger.error(`interactionCreate dispatch error: ${err?.message}`, { stack: err?.stack });
         }
       });
     }
@@ -249,6 +294,9 @@ export function createCommandHandler(client, logger, config) {
     installGlobal,
     removeModule,
     getRegistrySnapshot,
-    _debug: { commandsByModule, handlersByModule }
+    // v2 APIs for builder wiring
+    v2RegisterExecute,
+    v2RegisterAutocomplete,
+    _debug: { commandsByModule, handlersByModule, v2Routers }
   };
 }

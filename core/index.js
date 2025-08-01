@@ -13,6 +13,13 @@ import { createDsl } from "./dsl.js";
 import { createScheduler } from "./scheduler.js";
 import { createMetrics } from "./metrics.js";
 import { createMongo } from "./mongo.js";
+import { createStateManager } from "./state.js";
+import { createInteractionCommand, InteractionCommandBuilder, createBuilderRegistry } from "./builders.js";
+import { createPaginatedEmbed, createConfirmationDialog, createMultiSelectMenu } from "./ui.js";
+// New services
+import { createI18n } from "./i18n.js";
+import { createGuildConfig } from "./guildConfig.js";
+import { createErrorReporter } from "./reporting.js";
 
 /**
  * Create lifecycle utilities that track disposables for a given module.
@@ -111,8 +118,17 @@ export function createCore(client, baseLoggerLevel = "info") {
   const scheduler = createScheduler(logger);
   const mongo = createMongo(config, logger);
 
-  // DSL depends on some of the above
-  const dsl = createDsl({ logger, embed, rateLimiter, permissions });
+  // New cross-cutting services
+  const errorReporter = createErrorReporter({ config, logger });
+  const i18n = createI18n({ config, logger });
+  const guildConfig = createGuildConfig({ mongo, logger, config });
+
+  // v2: state manager and builder registry
+  const state = createStateManager(logger);
+  const builders = createBuilderRegistry();
+
+  // DSL depends on some of the above (augment with reporter and i18n)
+  const dsl = createDsl({ logger, embed, rateLimiter, permissions, errorReporter, i18n });
 
   return {
     client,
@@ -131,10 +147,30 @@ export function createCore(client, baseLoggerLevel = "info") {
     scheduler,
     mongo,
     dsl,
+    i18n,
+    guildConfig,
+    errorReporter,
+    // v2 surfaces
+    v2: {
+      state,
+      builders,
+      createInteractionCommand,
+      InteractionCommandBuilder,
+      ui: {
+        createPaginatedEmbed,
+        createConfirmationDialog,
+        createMultiSelectMenu,
+      },
+    },
     createModuleContext(moduleName) {
       const log = childLogger(logger, moduleName);
       const lifecycle = createLifecycle(log);
       const utils = createUtils(log);
+      // Module-scoped translator helper using module fallback chain
+      function t(key, params = {}, opts = {}) {
+        const locale = opts.locale || i18n.resolveLocale({ guildId: opts.guildId, userLocale: opts.userLocale });
+        return i18n.t({ key, params, locale, moduleName });
+      }
       return {
         client,
         logger: log,
@@ -153,7 +189,30 @@ export function createCore(client, baseLoggerLevel = "info") {
         mongo,
         dsl,
         lifecycle,
-        utils
+        utils,
+        t,
+        i18n,
+        guildConfig,
+        errorReporter,
+        // v2 in module context for easy access
+        v2: {
+          state,
+          builders,
+          createInteractionCommand,
+          InteractionCommandBuilder,
+          ui: {
+            createPaginatedEmbed,
+            createConfirmationDialog,
+            createMultiSelectMenu,
+          },
+          // convenience to register a builder to this module
+          register(builder) {
+            const { off } = builder.register({ ...this, ...{ commands, interactions, logger: log, t } }, moduleName, { stateManager: state });
+            const unregister = builders.add(moduleName, builder);
+            lifecycle.addDisposable(() => { try { off?.(); } catch {} try { unregister?.(); } catch {} });
+            return off;
+          }
+        }
       };
     },
   };
@@ -174,3 +233,11 @@ export { createDsl } from "./dsl.js";
 export { createScheduler } from "./scheduler.js";
 export { createMetrics } from "./metrics.js";
 export { createMongo } from "./mongo.js";
+// v2 exports
+export { createStateManager } from "./state.js";
+export { createInteractionCommand, InteractionCommandBuilder, createBuilderRegistry } from "./builders.js";
+export { createPaginatedEmbed, createConfirmationDialog, createMultiSelectMenu } from "./ui.js";
+// new exports
+export { createI18n } from "./i18n.js";
+export { createGuildConfig } from "./guildConfig.js";
+export { createErrorReporter } from "./reporting.js";
