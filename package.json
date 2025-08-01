@@ -30,6 +30,7 @@
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5",
     "mongodb": "^6.8.0",
+    "moonlink.js": "^4.52.2",
     "node-cron": "^3.0.3",
     "undici": "^6.19.8",
     "winston": "^3.13.0",

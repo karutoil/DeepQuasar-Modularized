@@ -72,6 +72,29 @@ export function createCommandHandler(client, logger, config) {
       interactionWired = true;
       client.on("interactionCreate", async (interaction) => {
         try {
+          // DEBUG: Log interaction channel context for troubleshooting
+          try {
+            const channelId = interaction.channelId;
+            const channelType = interaction.channel?.type;
+            const channelObjId = interaction.channel?.id;
+            logger.info('[DEBUG] Interaction Channel Context', {
+              channelId,
+              channelType,
+              channelObjId,
+              fullChannel: interaction.channel,
+              fullInteraction: {
+                id: interaction.id,
+                type: interaction.type,
+                commandName: interaction.commandName,
+                isChatInputCommand: interaction.isChatInputCommand?.(),
+                isContextMenuCommand: interaction.isContextMenuCommand?.(),
+                options: interaction.options,
+                channelId: interaction.channelId
+              }
+            });
+          } catch (err) {
+            logger.warn('[DEBUG] Failed to log interaction channel context:', err);
+          }
           // v2: centralized routing first
           if (interaction.isChatInputCommand?.() === true) {
             const name = interaction.commandName;
