@@ -55,7 +55,8 @@ async function main() {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent
+      GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildVoiceStates
     ],
     partials: [Partials.GuildMember, Partials.Message, Partials.Channel]
   });

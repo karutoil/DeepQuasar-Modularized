@@ -14,13 +14,16 @@ server:
 
 lavalink:
   plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.3"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.4"
       snapshot: false
-    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.7.0"
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.7.3"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
   server:
     password: ${LAVALINK_PASSWORD}
+    # Enable session resuming so Moonlink can restore players after reconnect/restart
+    resume-key: "deepquasar-session"
+    resume-timeout: 300 # seconds; increase if your restarts take longer
     # HTTP timeout configurations to reduce timeouts
     httpConfig:
       proxyHost: ""
@@ -66,12 +69,12 @@ lavalink:
 plugins:
   lavasrc:
     sources:
-      spotify: true # Enable Spotify source
+      spotify: false # Enable Spotify source
       youtube: true
     spotify:
       # clientId & clientSecret are required for using spsearch
-      clientId: "${SPOTIFY_CLIENT_ID}" # Your Spotify client ID
-      clientSecret: "${SPOTIFY_CLIENT_SECRET}" # Your Spotify client secret
+      #clientId: "${SPOTIFY_CLIENT_ID}" # Your Spotify client ID
+      #clientSecret: "${SPOTIFY_CLIENT_SECRET}" # Your Spotify client secret
       # spDc: "your sp dc cookie" # the sp dc cookie used for accessing the spotify lyrics api
       countryCode: "US" # the country code you want to use for filtering the artists top tracks. See https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
       playlistLoadLimit: 6 # The number of pages at 100 tracks each
@@ -149,11 +152,11 @@ logging:
     max-history: 7
     max-size: 10MB
   level:
-    root: ${LOG_LEVEL}
-    lavalink: ${LOG_LEVEL}
-    lavalink.server.io.SocketContext: ${LOG_LEVEL}
-    com.sedmelluq.discord.lavaplayer.tools.ExceptionTools: ${LOG_LEVEL}
-    dev.lavalink.youtube: ${LOG_LEVEL}
+    root: info
+    lavalink: info
+    lavalink.server.io.SocketContext: info
+    com.sedmelluq.discord.lavaplayer.tools.ExceptionTools: info
+    dev.lavalink.youtube: info
   request:
     enabled: true
     includeClientInfo: true
