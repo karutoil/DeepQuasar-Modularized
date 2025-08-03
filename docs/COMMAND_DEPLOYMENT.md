@@ -84,6 +84,66 @@ logger.info(`Deploy delta: +${delta.added.length} ~${delta.updated.length} -${de
 [INFO] Guild commands (individual): created=1, updated=1, deleted=1, duration=3456ms
 ```
 
+## Clear Commands Utility
+
+You can wipe all registered application commands (global or a specific guild) using the built-in clear script. This uses the Discord REST API and the canonical approach: a PUT [] to the appropriate route.
+
+### NPM Script
+
+```bash
+npm run clear
+```
+
+### Scope Selection
+
+- Env-driven default:
+  - COMMANDS_TARGET=guild|global
+  - If COMMANDS_TARGET=guild, you must provide GUILD_ID
+- CLI overrides:
+  - --scope=guild|global
+  - --guild=<GUILD_ID>
+
+If neither is set, presence of GUILD_ID implies guild; otherwise global.
+
+### Safety for Global Clears
+
+Global clears require explicit confirmation to prevent accidental removal for all users:
+
+- Set FORCE=yes in env, or
+- Pass --yes on the CLI
+
+### Required Environment
+
+- DISCORD_TOKEN (bot token)
+- DISCORD_CLIENT_ID (application id)
+- GUILD_ID (for guild scope)
+
+### Examples
+
+```bash
+# Clear guild commands using env
+COMMANDS_TARGET=guild GUILD_ID=123 npm run clear
+
+# Clear guild commands via CLI override
+npm run clear -- --scope=guild --guild=123
+
+# Attempt a global clear (will fail without confirmation)
+COMMANDS_TARGET=global npm run clear
+
+# Confirm global clear using env
+FORCE=yes COMMANDS_TARGET=global npm run clear
+
+# Confirm global clear using CLI
+npm run clear -- --scope=global --yes
+```
+
+### Implementation Notes
+
+- Global endpoint: PUT https://discord.com/api/v10/applications/{appId}/commands
+- Guild endpoint: PUT https://discord.com/api/v10/applications/{appId}/guilds/{guildId}/commands
+- Body: []
+- Auth header: Authorization: Bot <DISCORD_TOKEN>
+
 ## Migration Notes
 
 - **Backward Compatible**: Existing configurations continue to work

@@ -18,7 +18,8 @@
     "start": "node index.js",
     "scaffold": "node bin/scaffold-module.js",
     "lint": "echo \"No linter configured\"",
-    "prepare": "node -e \"\""
+    "prepare": "node -e \"\"",
+    "clear": "node bin/clear-commands.js"
   },
   "engines": {
     "node": ">=20"
