@@ -1,3 +1,22 @@
+// Helper to build the default ticket control buttons
+function buildDefaultTicketControls(ticketId) {
+  const buttons = [
+    new ButtonBuilder().setCustomId(`tickets:control:lock:${ticketId}`).setLabel("Lock").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`tickets:control:rename:${ticketId}`).setLabel("Rename").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`tickets:control:transcript:${ticketId}`).setLabel("Transcript").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`tickets:control:addUser:${ticketId}`).setLabel("Add User").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`tickets:control:removeUser:${ticketId}`).setLabel("Remove User").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`tickets:control:transfer:${ticketId}`).setLabel("Transfer").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`tickets:control:reopen:${ticketId}`).setLabel("Reopen").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`tickets:control:close:${ticketId}`).setLabel("Close").setStyle(ButtonStyle.Danger)
+  ];
+  // Split into rows of max 5 buttons
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 5) {
+    rows.push(new ActionRowBuilder().addComponents(...buttons.slice(i, i + 5)));
+  }
+  return rows;
+}
 /**
  * Ticket control handlers: Close, Add/Remove User, Lock/Unlock, Rename, Transcript, Transfer, Reopen
  * All actions are embed/button driven inside the ticket channel.
@@ -33,12 +52,140 @@ export async function registerTicketControlHandlers(ctx) {
   const { logger, lifecycle, client, interactions } = ctx;
   const moduleName = "tickets";
   const disposers = [];
-
   if (!interactions) {
     logger.warn("[Tickets] interactions registrar not available for ticket controls");
     return () => {};
   }
+  // ...existing code...
 
+  // Always register addUserSelect handler at startup
+  const disposerAddUserSelect = interactions.registerSelectMenu(moduleName, "tickets:control:addUserSelect:", async (interaction) => {
+    let replied = false;
+    try {
+      const isUserSelect = (typeof interaction.isUserSelectMenu === "function" && interaction.isUserSelectMenu()) || interaction.componentType === 5;
+      if (!isUserSelect) {
+        ctx.logger.warn("[Tickets] addUserSelect: not a user select menu", { customId: String(interaction.customId), componentType: String(interaction.componentType) });
+        await safeReply(interaction, { content: "Not a user select menu.", flags: 64 });
+        replied = true;
+        return;
+      }
+      const parts = String(interaction.customId).split(":");
+      const ticketId = parts[3];
+      const uid = Array.isArray(interaction.values) ? String(interaction.values[0]) : undefined;
+      const ticket = await updateTicket(ctx, interaction.guildId, ticketId, {});
+      if (!ticket) {
+        ctx.logger.warn("[Tickets] addUserSelect: ticket not found", { ticketId, guildId: String(interaction.guildId) });
+        await safeReply(interaction, { content: "Ticket not found.", flags: 64 });
+        replied = true;
+        return;
+      }
+      const channel = await interaction.client.channels.fetch(ticket.channelId).catch((err) => { ctx.logger.error("[Tickets] addUserSelect channel fetch error", { error: err?.message }); return null; });
+      if (!channel) {
+        ctx.logger.warn("[Tickets] addUserSelect: channel not found", { channelId: String(ticket.channelId) });
+        await safeReply(interaction, { content: "Channel not found.", flags: 64 });
+        replied = true;
+        return;
+      }
+      await addParticipant(ctx, interaction.guildId, ticket.ticketId, uid);
+      await channel.permissionOverwrites.edit(uid, {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true,
+      }).catch((err) => { ctx.logger.error("[Tickets] addUserSelect permissionOverwrites error", { error: err?.message }); });
+      await sendLog(ctx, interaction.guildId, {
+        title: "User Added to Ticket",
+        description: `Added <@${uid}> by <@${interaction.user.id}>`,
+        color: 0x57f287,
+      });
+      await safeReply(interaction, { content: "User added.", flags: 64 });
+      replied = true;
+    } catch (e) {
+      ctx.logger.error("[Tickets] addUserSelect error", { error: e?.message, stack: e?.stack });
+      if (!replied) {
+        try { await safeReply(interaction, { content: "Failed to add user. " + (e?.message || ""), flags: 64 }); } catch {}
+      }
+    } finally {
+      // If still not replied, send a fallback
+      if (!replied) {
+        try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch {}
+      }
+    }
+  }, { prefix: true });
+  disposers.push(disposerAddUserSelect);
+
+  // Always register transferSelect handler at startup
+  const disposerTransferSelect = interactions.registerSelectMenu(moduleName, "tickets:control:transferSelect:", async (interaction) => {
+    let replied = false;
+    try {
+      const isUserSelect = (typeof interaction.isUserSelectMenu === "function" && interaction.isUserSelectMenu()) || interaction.componentType === 5;
+      if (!isUserSelect) {
+        ctx.logger.warn("[Tickets] transferSelect: not a user select menu", { customId: String(interaction.customId), componentType: String(interaction.componentType) });
+        await safeReply(interaction, { content: "Not a user select menu.", flags: 64 });
+        replied = true;
+        return;
+      }
+      const parts = String(interaction.customId).split(":");
+      const ticketId = parts[3];
+      const assigneeId = Array.isArray(interaction.values) ? String(interaction.values[0]) : undefined;
+      const ticket = await updateTicket(ctx, interaction.guildId, ticketId, { assigneeId });
+      if (!ticket) {
+        await safeReply(interaction, { content: "Ticket not found.", flags: 64 });
+        replied = true;
+        return;
+      }
+      await sendLog(ctx, interaction.guildId, {
+        title: "Ticket Transferred",
+        description: `Assigned to <@${assigneeId}> by <@${interaction.user.id}>`,
+        color: 0x5865f2,
+      });
+      // Update both embeds in the ticket channel to show new owner
+      try {
+        const channel = await interaction.client.channels.fetch(ticket.channelId).catch(() => null);
+        if (channel) {
+          const messages = await channel.messages.fetch({ limit: 20 });
+          // Find the two most recent bot messages with embeds
+          const botMessages = messages.filter(m => m.author.id === interaction.client.user.id && m.embeds?.length);
+          const toUpdate = Array.from(botMessages.values()).slice(0, 2);
+          for (const msg of toUpdate) {
+            const embed = msg.embeds[0];
+            if (embed) {
+              // Clone embed and update owner/assignee field
+              const newEmbed = EmbedBuilder.from(embed);
+              // Try to update a field named "Owner" or "Assignee" if present, else add one
+              let found = false;
+              const fields = newEmbed.data.fields || [];
+              for (let f of fields) {
+                if (f.name.toLowerCase().includes("owner") || f.name.toLowerCase().includes("assignee")) {
+                  f.value = `<@${assigneeId}>`;
+                  found = true;
+                }
+              }
+              if (!found) {
+                fields.push({ name: "Owner", value: `<@${assigneeId}>`, inline: true });
+              }
+              newEmbed.setFields(fields);
+              await msg.edit({ embeds: [newEmbed] });
+            }
+          }
+        }
+      } catch (e) {
+        ctx.logger.warn("[Tickets] transferSelect: failed to update embeds after transfer", { error: e?.message });
+      }
+      await safeReply(interaction, { content: "Ticket transferred.", flags: 64 });
+      replied = true;
+    } catch (e) {
+      ctx.logger.error("[Tickets] transferSelect error", { error: e?.message, stack: e?.stack });
+      if (!replied) {
+        try { await safeReply(interaction, { content: "Transfer failed. " + (e?.message || ""), flags: 64 }); } catch {}
+      }
+    } finally {
+      // If still not replied, send a fallback
+      if (!replied) {
+        try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch {}
+      }
+    }
+  }, { prefix: true });
+  disposers.push(disposerTransferSelect);
   // Close -> ask reason modal
   disposers.push(
     interactions.registerButton(moduleName, "tickets:control:close:", async (interaction) => {
@@ -66,7 +213,8 @@ export async function registerTicketControlHandlers(ctx) {
   // Close modal -> confirm and proceed
   disposers.push(
     interactions.registerModal(moduleName, "tickets:control:closeModal:", async (interaction) => {
-      const [, , , , ticketId] = interaction.customId.split(":");
+      const parts = interaction.customId.split(":");
+      const ticketId = parts[3];
       const reason = interaction.fields.getTextInputValue("reason")?.trim();
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`tickets:control:closeConfirm:${ticketId}:${Buffer.from(reason || "").toString("base64url")}`).setLabel("Confirm Close").setStyle(ButtonStyle.Danger),
@@ -89,14 +237,23 @@ export async function registerTicketControlHandlers(ctx) {
       try {
         assertInGuild(interaction);
         const parts = interaction.customId.split(":"); // tickets:control:closeConfirm:{ticketId}:{reasonB64}
-        const ticketId = parts[4];
-        const reason = parts[5] ? Buffer.from(parts[5], "base64url").toString("utf8") : "";
+        const ticketId = parts[3];
+        const reason = parts[4] ? Buffer.from(parts[4], "base64url").toString("utf8") : "";
         const guildId = interaction.guildId;
+        logger.info("[Tickets] closeConfirm pressed", { customId: interaction.customId, ticketId, reason, guildId });
 
         const ticket = await updateTicket(ctx, guildId, ticketId, {}); // fetch latest
-        if (!ticket) return safeReply(interaction, { content: "Ticket not found.", ephemeral: true });
+        logger.info("[Tickets] closeConfirm updateTicket result", { ticket });
+        if (!ticket) {
+          logger.warn("[Tickets] closeConfirm: ticket not found", { ticketId, guildId });
+          return safeReply(interaction, { content: "Ticket not found.", ephemeral: true });
+        }
 
-        await beginClosing(ctx, guildId, ticketId);
+        try {
+          await beginClosing(ctx, guildId, ticketId);
+        } catch (e) {
+          logger.error("[Tickets] closeConfirm: beginClosing error", { error: e?.message, stack: e?.stack });
+        }
 
         // Transcript
         let transcript = null;
@@ -107,7 +264,11 @@ export async function registerTicketControlHandlers(ctx) {
         }
 
         // Finalize closed
-        await finalizeClosed(ctx, guildId, ticketId, { reason: reason || "Closed by staff/user", transcript });
+        try {
+          await finalizeClosed(ctx, guildId, ticketId, { reason: reason || "Closed by staff/user", transcript });
+        } catch (e) {
+          logger.error("[Tickets] closeConfirm: finalizeClosed error", { error: e?.message, stack: e?.stack });
+        }
 
         // DM opener if configured
         try {
@@ -121,15 +282,21 @@ export async function registerTicketControlHandlers(ctx) {
               await user.send(msg).catch(() => {});
             }
           }
-        } catch {}
+        } catch (e) {
+          logger.warn("[Tickets] closeConfirm: DM error", { error: e?.message });
+        }
 
         // Log
-        await sendLog(ctx, guildId, {
-          title: "Ticket Closed",
-          description: `Ticket ${ticket.ticketId} closed by <@${interaction.user.id}>.\nReason: ${reason || "N/A"}`,
-          color: 0xed4245,
-          fields: [{ name: "Channel", value: `<#${ticket.channelId}>` }],
-        });
+        try {
+          await sendLog(ctx, guildId, {
+            title: "Ticket Closed",
+            description: `Ticket ${ticket.ticketId} closed by <@${interaction.user.id}>.\nReason: ${reason || "N/A"}`,
+            color: 0xed4245,
+            fields: [{ name: "Channel", value: `<#${ticket.channelId}>` }],
+          });
+        } catch (e) {
+          logger.warn("[Tickets] closeConfirm: sendLog error", { error: e?.message });
+        }
 
         // Optional metrics: ticket closed
         try {
@@ -143,17 +310,38 @@ export async function registerTicketControlHandlers(ctx) {
               transcriptUrl: transcript?.url || null,
             });
           }
-        } catch {}
-
-        // Delete channel then archive
-        const channel = await interaction.client.channels.fetch(ticket.channelId).catch(() => null);
-        if (channel && channel.deletable) {
-          await channel.delete("Ticket closed");
+        } catch (e) {
+          logger.warn("[Tickets] closeConfirm: metrics error", { error: e?.message });
         }
-        await archiveTicket(ctx, guildId, ticketId);
 
-        await safeReply(interaction, { content: "Ticket closed.", ephemeral: true });
+        // Always reply before deleting the channel
+        try {
+          await safeReply(interaction, { content: "Ticket closed.", ephemeral: true });
+        } catch (e) {
+          // Ignore unknown interaction errors
+          if (e?.code !== 10062) {
+            logger.warn("[Tickets] closeConfirm: safeReply error", { error: e?.message });
+          }
+        }
+        // Delete channel then archive
+        try {
+          const channel = await interaction.client.channels.fetch(ticket.channelId).catch(() => null);
+          if (channel && channel.deletable) {
+            await channel.delete("Ticket closed");
+          }
+        } catch (e) {
+          // Ignore unknown channel errors
+          if (e?.code !== 10003) {
+            logger.warn("[Tickets] closeConfirm: channel delete error", { error: e?.message });
+          }
+        }
+        try {
+          await archiveTicket(ctx, guildId, ticketId);
+        } catch (e) {
+          logger.warn("[Tickets] closeConfirm: archiveTicket error", { error: e?.message });
+        }
       } catch (e) {
+        logger.error("[Tickets] closeConfirm: top-level error", { error: e?.message, stack: e?.stack });
         await safeReply(interaction, { content: "Failed to close ticket.", ephemeral: true });
       }
     }, { prefix: true })
@@ -180,11 +368,37 @@ export async function registerTicketControlHandlers(ctx) {
         });
         // Apply computed overwrites
         for (const o of lockOvr) {
-          const allow = new PermissionsBitField(o.allow || 0).toArray().reduce((acc, k) => ({ ...acc, [k]: true }), {});
-          const deny = new PermissionsBitField(o.deny || 0).toArray().reduce((acc, k) => ({ ...acc, [k]: false }), {});
+          let allow = {};
+          let deny = {};
+          if (o.allow && typeof o.allow === "number" && o.allow !== 0) {
+            allow = new PermissionsBitField(o.allow).toArray().reduce((acc, k) => ({ ...acc, [k]: true }), {});
+          }
+          if (o.deny && typeof o.deny === "number" && o.deny !== 0) {
+            deny = new PermissionsBitField(o.deny).toArray().reduce((acc, k) => ({ ...acc, [k]: false }), {});
+          }
           await channel.permissionOverwrites.edit(o.id, { ...allow, ...deny }).catch(() => {});
         }
         await setLocked(ctx, interaction.guildId, ticket.ticketId, true);
+
+        // Update control message to show 'Unlock' instead of 'Lock'
+        try {
+          // Find the last bot message in the channel with components
+          const messages = await channel.messages.fetch({ limit: 10 });
+          const botMsg = messages.find(m => m.author.id === interaction.client.user.id && m.components?.length);
+          if (botMsg) {
+            // Build new row with 'Unlock' button
+            const row = new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`tickets:control:unlock:${ticket.ticketId}`)
+                .setLabel("Unlock")
+                .setStyle(ButtonStyle.Success),
+              // ...add other buttons as needed (optional: transcript, rename, etc.)
+            );
+            await botMsg.edit({ components: [row] });
+          }
+        } catch (e) {
+          logger.warn("[Tickets] lock: failed to update control message", { error: e?.message });
+        }
 
         await sendLog(ctx, interaction.guildId, {
           title: "Ticket Locked",
@@ -192,8 +406,9 @@ export async function registerTicketControlHandlers(ctx) {
           color: 0xf1c40f,
         });
         await safeReply(interaction, { content: "Ticket locked.", ephemeral: true });
-      } catch {
-        await safeReply(interaction, { content: "Lock failed.", ephemeral: true });
+      } catch (e) {
+        logger.error("[Tickets] lock button error", { error: e?.message, stack: e?.stack });
+        await safeReply(interaction, { content: `Lock failed. ${e?.message || ''}`, ephemeral: true });
       }
     }, { prefix: true })
   );
@@ -218,11 +433,28 @@ export async function registerTicketControlHandlers(ctx) {
           locked: false,
         });
         for (const o of openOvr) {
-          const allow = new PermissionsBitField(o.allow || 0).toArray().reduce((acc, k) => ({ ...acc, [k]: true }), {});
-          const deny = new PermissionsBitField(o.deny || 0).toArray().reduce((acc, k) => ({ ...acc, [k]: false }), {});
+          let allow = {};
+          let deny = {};
+          if (o.allow && typeof o.allow === "number" && o.allow !== 0) {
+            allow = new PermissionsBitField(o.allow).toArray().reduce((acc, k) => ({ ...acc, [k]: true }), {});
+          }
+          if (o.deny && typeof o.deny === "number" && o.deny !== 0) {
+            deny = new PermissionsBitField(o.deny).toArray().reduce((acc, k) => ({ ...acc, [k]: false }), {});
+          }
           await channel.permissionOverwrites.edit(o.id, { ...allow, ...deny }).catch(() => {});
         }
         await setLocked(ctx, interaction.guildId, ticket.ticketId, false);
+
+        // Update control message to restore all buttons using helper
+        try {
+          const messages = await channel.messages.fetch({ limit: 10 });
+          const botMsg = messages.find(m => m.author.id === interaction.client.user.id && m.components?.length);
+          if (botMsg) {
+            await botMsg.edit({ components: buildDefaultTicketControls(ticket.ticketId) });
+          }
+        } catch (e) {
+          logger.warn("[Tickets] unlock: failed to update control message", { error: e?.message });
+        }
 
         await sendLog(ctx, interaction.guildId, {
           title: "Ticket Unlocked",
@@ -257,7 +489,7 @@ export async function registerTicketControlHandlers(ctx) {
   disposers.push(
     interactions.registerModal(moduleName, "tickets:control:renameModal:", async (interaction) => {
       try {
-        const [, , , , ticketId] = interaction.customId.split(":");
+        const ticketId = interaction.customId.split(":")[3];
         const name = interaction.fields.getTextInputValue("name")?.trim()?.toLowerCase().replace(/[^a-z0-9-]+/g, "-").slice(0, 50);
         const ticket = await updateTicket(ctx, interaction.guildId, ticketId, {}); // fetch latest
         if (!ticket) return safeReply(interaction, { content: "Ticket not found.", ephemeral: true });
@@ -324,48 +556,45 @@ export async function registerTicketControlHandlers(ctx) {
   // Add/Remove user: simplified modal with user ID input for now
   disposers.push(
     interactions.registerButton(moduleName, "tickets:control:addUser:", async (interaction) => {
+      ctx.logger.debug("[Tickets] addUser button handler entry", {
+        customId: interaction.customId,
+        guildId: interaction.guildId,
+        channelId: interaction.channelId,
+        userId: interaction.user?.id,
+        member: interaction.member,
+        clientUserId: interaction.client?.user?.id
+      });
       try {
+        ctx.logger.debug("[Tickets] addUser before assertInGuild/requireManageGuild");
         assertInGuild(interaction); requireManageGuild(interaction);
+        ctx.logger.debug("[Tickets] addUser before getTicketByChannel", { guildId: interaction.guildId, channelId: interaction.channelId });
         const ticket = await getTicketByChannel(ctx, interaction.guildId, interaction.channelId);
-        if (!ticket) return safeReply(interaction, { content: "Not a ticket channel.", ephemeral: true });
-
-        const modal = new ModalBuilder().setCustomId(`tickets:control:addUserModal:${ticket.ticketId}`).setTitle("Add User to Ticket");
-        const userId = new TextInputBuilder().setCustomId("userId").setLabel("User ID").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25);
-        modal.addComponents(new ActionRowBuilder().addComponents(userId));
-        await interaction.showModal(modal);
-      } catch {
-        await safeReply(interaction, { content: "Failed to open add user modal.", ephemeral: true });
+        ctx.logger.debug("[Tickets] addUser after getTicketByChannel", { ticket });
+        if (!ticket) {
+          ctx.logger.warn("[Tickets] addUser: not a ticket channel", { guildId: interaction.guildId, channelId: interaction.channelId });
+          return safeReply(interaction, { content: "Not a ticket channel.", ephemeral: true });
+        }
+        ctx.logger.debug("[Tickets] addUser before UserSelectMenuBuilder", { ticketId: ticket.ticketId });
+        const row = new ActionRowBuilder().addComponents(
+          new (await import('discord.js')).UserSelectMenuBuilder()
+            .setCustomId(`tickets:control:addUserSelect:${ticket.ticketId}`)
+            .setPlaceholder("Select a member to add")
+            .setMinValues(1)
+            .setMaxValues(1)
+        );
+        ctx.logger.debug("[Tickets] addUser before safeReply", { row });
+        await safeReply(interaction, { content: "Select a member to add to the ticket:", components: [row], ephemeral: true });
+        ctx.logger.debug("[Tickets] addUser after safeReply");
+      } catch (e) {
+        ctx.logger.error("[Tickets] addUser error", { error: e?.message, stack: e?.stack });
+        await safeReply(interaction, { content: "Failed to open add user select.", ephemeral: true });
       }
     }, { prefix: true })
   );
 
   disposers.push(
     interactions.registerModal(moduleName, "tickets:control:addUserModal:", async (interaction) => {
-      try {
-        const [, , , , ticketId] = interaction.customId.split(":");
-        const uid = interaction.fields.getTextInputValue("userId")?.trim();
-        const ticket = await updateTicket(ctx, interaction.guildId, ticketId, {}); // fetch latest
-        if (!ticket) return safeReply(interaction, { content: "Ticket not found.", ephemeral: true });
-
-        const channel = await interaction.client.channels.fetch(ticket.channelId).catch(() => null);
-        if (!channel) return safeReply(interaction, { content: "Channel not found.", ephemeral: true });
-
-        await addParticipant(ctx, interaction.guildId, ticket.ticketId, uid);
-        await channel.permissionOverwrites.edit(uid, {
-          ViewChannel: true,
-          SendMessages: true,
-          ReadMessageHistory: true,
-        }).catch(() => {});
-
-        await sendLog(ctx, interaction.guildId, {
-          title: "User Added to Ticket",
-          description: `Added <@${uid}> by <@${interaction.user.id}>`,
-          color: 0x57f287,
-        });
-        await safeReply(interaction, { content: "User added.", ephemeral: true });
-      } catch {
-        await safeReply(interaction, { content: "Failed to add user.", ephemeral: true });
-      }
+      // Remove modal handler for add user
     }, { prefix: true })
   );
 
@@ -420,33 +649,194 @@ export async function registerTicketControlHandlers(ctx) {
         const ticket = await getTicketByChannel(ctx, interaction.guildId, interaction.channelId);
         if (!ticket) return safeReply(interaction, { content: "Not a ticket channel.", ephemeral: true });
 
-        const modal = new ModalBuilder().setCustomId(`tickets:control:transferModal:${ticket.ticketId}`).setTitle("Transfer Ticket");
-        const userId = new TextInputBuilder().setCustomId("assigneeId").setLabel("Assignee User ID").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25);
-        modal.addComponents(new ActionRowBuilder().addComponents(userId));
-        await interaction.showModal(modal);
+        // Show member select menu
+        const row = new ActionRowBuilder().addComponents(
+          new (await import('discord.js')).UserSelectMenuBuilder()
+            .setCustomId(`tickets:control:transferSelect:${ticket.ticketId}`)
+            .setPlaceholder("Select a member to transfer to")
+            .setMinValues(1)
+            .setMaxValues(1)
+        );
+        await safeReply(interaction, { content: "Select a member to transfer the ticket to:", components: [row], ephemeral: true });
       } catch {
-        await safeReply(interaction, { content: "Failed to open transfer modal.", ephemeral: true });
+        await safeReply(interaction, { content: "Failed to open transfer select.", ephemeral: true });
       }
     }, { prefix: true })
   );
 
   disposers.push(
     interactions.registerModal(moduleName, "tickets:control:transferModal:", async (interaction) => {
+      // Remove modal handler for transfer
+  // Add User select menu handler
+  // Register addUserSelect handler and log registration
+  const disposerAddUserSelect = interactions.registerSelectMenu(moduleName, "tickets:control:addUserSelect:", async (interaction) => {
+    ctx.logger.debug("[Tickets] addUserSelect handler entry", {
+      customId: interaction.customId,
+      componentType: interaction.componentType,
+      isUserSelectMenu: typeof interaction.isUserSelectMenu === "function" ? interaction.isUserSelectMenu() : undefined,
+      isAnySelectMenu: typeof interaction.isAnySelectMenu === "function" ? interaction.isAnySelectMenu() : undefined,
+      values: interaction.values,
+      type: interaction.type,
+      guildId: interaction.guildId,
+      channelId: interaction.channelId,
+      userId: interaction.user?.id,
+      member: interaction.member,
+      clientUserId: interaction.client?.user?.id
+    });
+    let replied = false;
+    try {
+      ctx.logger.debug("[Tickets] addUserSelect before isUserSelect check", {
+        customId: interaction.customId,
+        componentType: interaction.componentType,
+        values: interaction.values
+      });
+      const isUserSelect = (typeof interaction.isUserSelectMenu === "function" && interaction.isUserSelectMenu()) || interaction.componentType === 5;
+      ctx.logger.debug("[Tickets] addUserSelect after isUserSelect check", { isUserSelect });
+      if (!isUserSelect) {
+        ctx.logger.warn("[Tickets] addUserSelect: not a user select menu", { customId: interaction.customId, componentType: interaction.componentType });
+        await safeReply(interaction, { content: "Not a user select menu.", flags: 64 });
+        replied = true;
+        return;
+      }
+      ctx.logger.debug("[Tickets] addUserSelect triggered", { customId: interaction.customId, values: interaction.values, componentType: interaction.componentType });
+      const parts = interaction.customId.split(":");
+      ctx.logger.debug("[Tickets] addUserSelect after customId split", { parts });
+      const ticketId = parts[3];
+      const uid = interaction.values[0];
+      ctx.logger.debug("[Tickets] addUserSelect extracted", { ticketId, uid });
+      ctx.logger.debug("[Tickets] addUserSelect before updateTicket", { ctx, guildId: interaction.guildId, ticketId });
+      const ticket = await updateTicket(ctx, interaction.guildId, ticketId, {});
+      ctx.logger.debug("[Tickets] addUserSelect after updateTicket", { ticket });
+      if (!ticket) {
+        ctx.logger.warn("[Tickets] addUserSelect: ticket not found", { ticketId, guildId: interaction.guildId });
+        await safeReply(interaction, { content: "Ticket not found.", flags: 64 });
+        replied = true;
+        return;
+      }
+      ctx.logger.debug("[Tickets] addUserSelect before channel fetch", { channelId: ticket.channelId });
+      const channel = await interaction.client.channels.fetch(ticket.channelId).catch((err) => { ctx.logger.error("[Tickets] addUserSelect channel fetch error", { error: err?.message }); return null; });
+      ctx.logger.debug("[Tickets] addUserSelect after channel fetch", { channel });
+      if (!channel) {
+        ctx.logger.warn("[Tickets] addUserSelect: channel not found", { channelId: ticket.channelId });
+        await safeReply(interaction, { content: "Channel not found.", flags: 64 });
+        replied = true;
+        return;
+      }
+      ctx.logger.debug("[Tickets] addUserSelect before addParticipant", { ticketId, uid });
+      await addParticipant(ctx, interaction.guildId, ticket.ticketId, uid);
+      ctx.logger.debug("[Tickets] addUserSelect after addParticipant", { ticketId, uid });
+      ctx.logger.debug("[Tickets] addUserSelect before permissionOverwrites.edit", { channelId: channel.id, uid });
+      await channel.permissionOverwrites.edit(uid, {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true,
+      }).catch((err) => { ctx.logger.error("[Tickets] addUserSelect permissionOverwrites error", { error: err?.message }); });
+      ctx.logger.debug("[Tickets] addUserSelect after permissionOverwrites.edit", { channelId: channel.id, uid });
+      ctx.logger.debug("[Tickets] addUserSelect before sendLog", { ticketId, uid });
+      await sendLog(ctx, interaction.guildId, {
+        title: "User Added to Ticket",
+        description: `Added <@${uid}> by <@${interaction.user.id}>`,
+        color: 0x57f287,
+      });
+      ctx.logger.debug("[Tickets] addUserSelect after sendLog", { ticketId, uid });
+      await safeReply(interaction, { content: "User added.", flags: 64 });
+      replied = true;
+      ctx.logger.debug("[Tickets] addUserSelect after safeReply", { ticketId, uid });
+    } catch (e) {
+      ctx.logger.error("[Tickets] addUserSelect error", { error: e?.message, stack: e?.stack });
+      if (!replied) {
+        try { await safeReply(interaction, { content: "Failed to add user. " + (e?.message || ""), flags: 64 }); } catch {}
+      }
+    } finally {
+      // If still not replied, send a fallback
+      if (!replied) {
+        try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch {}
+      }
+    }
+  }, { prefix: true });
+  ctx.logger.info("[Tickets] addUserSelect handler registered for prefix tickets:control:addUserSelect:");
+  // Log selectPrefixesByModule keys for debugging
+  if (interactions._debug && interactions._debug.selectPrefixesByModule) {
+    const selectPrefixes = interactions._debug.selectPrefixesByModule;
+    ctx.logger.info("[Tickets] selectPrefixesByModule keys", { keys: Array.from(selectPrefixes.keys()), tickets: Array.from(selectPrefixes.get("tickets")?.keys() || []) });
+  }
+  disposers.push(disposerAddUserSelect);
+  
+  // Transfer select menu handler
+  disposers.push(
+    interactions.registerSelectMenu(moduleName, "tickets:control:transferSelect:", async (interaction) => {
+      ctx.logger.debug("[Tickets] transferSelect handler entry", {
+        customId: interaction.customId,
+        componentType: interaction.componentType,
+        isUserSelectMenu: typeof interaction.isUserSelectMenu === "function" ? interaction.isUserSelectMenu() : undefined,
+        isAnySelectMenu: typeof interaction.isAnySelectMenu === "function" ? interaction.isAnySelectMenu() : undefined,
+        values: interaction.values,
+        type: interaction.type
+      });
+      let replied = false;
       try {
-        const [, , , , ticketId] = interaction.customId.split(":");
-        const assigneeId = interaction.fields.getTextInputValue("assigneeId")?.trim();
+        ctx.logger.debug("[Tickets] transferSelect before isUserSelect check");
+        const isUserSelect = (typeof interaction.isUserSelectMenu === "function" && interaction.isUserSelectMenu()) || interaction.componentType === 5;
+        ctx.logger.debug("[Tickets] transferSelect after isUserSelect check", { isUserSelect });
+        if (!isUserSelect) {
+          ctx.logger.warn("[Tickets] transferSelect: not a user select menu", { customId: interaction.customId, componentType: interaction.componentType });
+          await safeReply(interaction, { content: "Not a user select menu.", flags: 64 });
+          replied = true;
+          return;
+        }
+        ctx.logger.debug("[Tickets] transferSelect triggered", { customId: interaction.customId, values: interaction.values, componentType: interaction.componentType });
+        const parts = interaction.customId.split(":");
+        ctx.logger.debug("[Tickets] transferSelect after customId split", { parts });
+        const ticketId = parts[3];
+        const assigneeId = interaction.values[0];
+        ctx.logger.debug("[Tickets] transferSelect extracted", { ticketId, assigneeId });
+        ctx.logger.debug("[Tickets] transferSelect before updateTicket");
         const ticket = await updateTicket(ctx, interaction.guildId, ticketId, { assigneeId });
-        if (!ticket) return safeReply(interaction, { content: "Ticket not found.", ephemeral: true });
-
+        ctx.logger.debug("[Tickets] transferSelect after updateTicket", { ticket });
+        if (!ticket) {
+          await safeReply(interaction, { content: "Ticket not found.", flags: 64 });
+          replied = true;
+          return;
+        }
+        ctx.logger.debug("[Tickets] transferSelect before sendLog");
         await sendLog(ctx, interaction.guildId, {
           title: "Ticket Transferred",
           description: `Assigned to <@${assigneeId}> by <@${interaction.user.id}>`,
           color: 0x5865f2,
         });
-        await safeReply(interaction, { content: "Ticket transferred.", ephemeral: true });
-      } catch {
-        await safeReply(interaction, { content: "Transfer failed.", ephemeral: true });
+        ctx.logger.debug("[Tickets] transferSelect after sendLog", { ticketId, assigneeId });
+        await safeReply(interaction, { content: "Ticket transferred.", flags: 64 });
+        replied = true;
+        ctx.logger.debug("[Tickets] transferSelect after safeReply", { ticketId, assigneeId });
+      } catch (e) {
+        ctx.logger.error("[Tickets] transferSelect error", { error: e?.message, stack: e?.stack });
+        if (!replied) {
+          try { await safeReply(interaction, { content: "Transfer failed. " + (e?.message || ""), flags: 64 }); } catch {}
+        }
+      } finally {
+        // If still not replied, send a fallback
+        if (!replied) {
+          try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch {}
+        }
       }
+// Minimal UserSelectMenu handler for core validation
+interactions.registerSelectMenu(moduleName, "tickets:control:coreTestUserSelect:", async (interaction) => {
+  ctx.logger.debug("[Tickets] coreTestUserSelect handler entry", {
+    customId: interaction.customId,
+    componentType: interaction.componentType,
+    isUserSelectMenu: typeof interaction.isUserSelectMenu === "function" ? interaction.isUserSelectMenu() : undefined,
+    values: interaction.values,
+    type: interaction.type
+  });
+  try {
+    await safeReply(interaction, { content: `Selected user: ${interaction.values[0]}`, flags: 64 });
+    ctx.logger.debug("[Tickets] coreTestUserSelect safeReply sent");
+  } catch (e) {
+    ctx.logger.error("[Tickets] coreTestUserSelect error", { error: e?.message });
+  }
+});
+    }, { prefix: true })
+  );
     }, { prefix: true })
   );
 

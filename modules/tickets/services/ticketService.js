@@ -66,12 +66,25 @@ export async function getTicketById(ctx, guildId, ticketId) {
 
 export async function updateTicket(ctx, guildId, ticketId, patch = {}) {
   const db = await ctx.mongo.getDb();
-  const res = await db.collection(COLLECTION).findOneAndUpdate(
-    { guildId, ticketId },
-    { $set: { ...patch, updatedAt: now() } },
-    { returnDocument: "after" }
-  );
-  return res.value;
+  ctx.logger.debug("[Tickets] updateTicket db/collection", {
+    dbName: db.databaseName,
+    collectionName: COLLECTION
+  });
+  ctx.logger.debug("[Tickets] updateTicket types", {
+    guildIdType: typeof guildId,
+    ticketIdType: typeof ticketId,
+    guildIdValue: guildId,
+    ticketIdValue: ticketId
+  });
+  const query = { guildId, ticketId };
+  const update = { $set: { ...patch, updatedAt: now() } };
+  const opts = { returnDocument: "after" };
+  ctx.logger.debug("[Tickets] updateTicket query", { query, update });
+  const result = await db.collection(COLLECTION).findOneAndUpdate(query, update, opts);
+  ctx.logger.debug("[Tickets] updateTicket result", { result });
+  ctx.logger.debug("[Tickets] updateTicket raw result", { module: "tickets", result });
+  ctx.logger.debug("[Tickets] updateTicket returned value", { module: "tickets", value: result });
+  return result;
 }
 
 export async function recordActivity(ctx, guildId, ticketId) {

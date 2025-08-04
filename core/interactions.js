@@ -125,10 +125,28 @@ export function createInteractions(client, logger) {
         return;
       }
 
-      // Select menus (string, user, role, channel, mentionable)
+      // User/member select menu (componentType: 5)
+      if ((typeof interaction.isUserSelectMenu === "function" && interaction.isUserSelectMenu()) || interaction.componentType === 5) {
+        logger.debug("[Core] UserSelectMenu dispatch", {
+          customId: interaction.customId,
+          componentType: interaction.componentType,
+          isUserSelectMenu: typeof interaction.isUserSelectMenu === "function" ? interaction.isUserSelectMenu() : undefined,
+          isAnySelectMenu: typeof interaction.isAnySelectMenu === "function" ? interaction.isAnySelectMenu() : undefined,
+          values: interaction.values,
+          type: interaction.type
+        });
+        const id = interaction.customId;
+        const h = findByExactOrPrefix(id, selectsByModule, selectPrefixesByModule);
+        logger.debug("[Core] About to call handler for select menu", { customId: interaction.customId, handlerExists: !!h });
+        if (h) return await h(interaction);
+        return;
+      }
+
+      // Other select menus (string, role, channel, mentionable)
       if (interaction.isAnySelectMenu?.()) {
         const id = interaction.customId;
         const h = findByExactOrPrefix(id, selectsByModule, selectPrefixesByModule);
+        logger.debug("[Core] About to call handler for select menu", { customId: interaction.customId, handlerExists: !!h });
         if (h) return await h(interaction);
         return;
       }
@@ -158,6 +176,7 @@ export function createInteractions(client, logger) {
   return {
     registerButton,
     registerSelect,
+    registerSelectMenu: registerSelect,
     registerModal,
     registerUserContext,
     registerMessageContext,

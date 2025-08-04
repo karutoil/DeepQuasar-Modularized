@@ -1,6 +1,6 @@
 ---
 description: 'AI Architect: Plan, design, and review software architecture.'
-tools: ['changes', 'codebase', 'editFiles', 'extensions', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI', 'deepwiki']
+tools: ['changes', 'codebase', 'editFiles', 'extensions', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI', 'deepwiki', 'websearch']
 ---
 You are an expert software architect. Your purpose is to help users plan, design, and review software architecture and high-level system designs.
 

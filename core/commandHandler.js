@@ -92,6 +92,19 @@ export function createCommandHandler(client, logger, config) {
                 channelId: interaction.channelId
               }
             });
+            // GLOBAL: Log every interaction's customId/componentType for troubleshooting
+            logger.debug('[DEBUG] Interaction Received', {
+              type: interaction.type,
+              customId: interaction.customId,
+              componentType: interaction.componentType,
+              isButton: interaction.isButton?.(),
+              isSelectMenu: interaction.isSelectMenu?.(),
+              isModalSubmit: interaction.isModalSubmit?.(),
+              isChatInputCommand: interaction.isChatInputCommand?.(),
+              isContextMenuCommand: interaction.isContextMenuCommand?.(),
+              userId: interaction.user?.id,
+              channelId: interaction.channelId
+            });
           } catch (err) {
             logger.warn('[DEBUG] Failed to log interaction channel context:', err);
           }
@@ -119,7 +132,14 @@ export function createCommandHandler(client, logger, config) {
           }
 
           // Legacy/compat routing
-          if (!interaction.isChatInputCommand?.() && !interaction.isContextMenuCommand?.()) return;
+          // Only return early if interaction is NOT a chat input, context menu, button, select menu, or modal
+          if (
+            !interaction.isChatInputCommand?.() &&
+            !interaction.isContextMenuCommand?.() &&
+            !interaction.isButton?.() &&
+            !interaction.isSelectMenu?.() &&
+            !interaction.isModalSubmit?.()
+          ) return;
           for (const h of Array.from(allHandlers)) {
             try {
               await h(interaction);

@@ -298,6 +298,10 @@ export async function registerPanelHandlers(ctx) {
         }
 
         const types = await listTypes(ctx, interaction.guildId);
+        logger.info("[Tickets] Available typeIds for panel button", {
+          typeIds: types.map(t => t.typeId),
+          types
+        });
         if (!types.length) return safeReply(interaction, { content: "No ticket types available. Create a type first.", ephemeral: true });
         const options = types.slice(0, 25).map((t) => ({ label: t.name, value: `${t.typeId}` }));
         const row = new ActionRowBuilder().addComponents(
@@ -391,9 +395,12 @@ export async function registerPanelHandlers(ctx) {
         }
 
         const label = interaction.fields.getTextInputValue("label")?.trim()?.slice(0, 80) || "Create Ticket";
-
-        const panel = await updatePanel(ctx, interaction.guildId, panelId, {}); // fetch current via update no-op
+        const { getPanel } = await import("../services/panelService.js");
+        const panel = await getPanel(ctx, interaction.guildId, panelId);
         if (!panel) {
+          // Debug: log all panels for this guild
+          const allPanels = await listPanels(ctx, interaction.guildId);
+          logger.warn("[Tickets] Panel not found in addButton modal", { panelId, allPanels });
           return safeReply(interaction, { content: "Panel not found. It may have been deleted.", ephemeral: true });
         }
 
@@ -444,7 +451,8 @@ export async function registerPanelHandlers(ctx) {
       try {
         assertInGuild(interaction); requireManageGuild(interaction);
         const [, , , panelId] = interaction.customId.split(":"); // tickets:panel:removeButton:{panelId}
-        const panel = await updatePanel(ctx, interaction.guildId, panelId, {}); // fetch latest
+        const { getPanel } = await import("../services/panelService.js");
+        const panel = await getPanel(ctx, interaction.guildId, panelId);
         const buttons = Array.isArray(panel?.buttons) ? panel.buttons : [];
         if (!buttons.length) return safeReply(interaction, { content: "No buttons to remove.", ephemeral: true });
  
@@ -469,7 +477,8 @@ export async function registerPanelHandlers(ctx) {
         assertInGuild(interaction); requireManageGuild(interaction);
         const [, , , , panelId] = interaction.customId.split(":"); // tickets:panel:removeButton:pick:{panelId}
         const idx = Number(interaction.values?.[0] ?? -1);
-        const panel = await updatePanel(ctx, interaction.guildId, panelId, {}); // fetch latest
+        const { getPanel } = await import("../services/panelService.js");
+        const panel = await getPanel(ctx, interaction.guildId, panelId);
         const buttons = Array.isArray(panel?.buttons) ? [...panel.buttons] : [];
         if (!(idx >= 0 && idx < buttons.length)) return safeReply(interaction, { content: "Invalid selection.", ephemeral: true });
  
