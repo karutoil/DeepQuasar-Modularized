@@ -187,6 +187,178 @@ export function createCommandHandler(client, logger, config) {
     }
   }
 
+  // Normalize a command object for comparison with Discord's GET result.
+  // Discord GET includes ids/default_member_permissions/dm_permission/version/type/etc.
+  // We compare only fields that matter for behavior: name, description, type, options, contexts, integration_types, nsfw, default_member_permissions, dm_permission.
+  function normalizeForCompare(cmd) {
+    const {
+      name,
+      description,
+      description_localizations,
+      type,
+      options,
+      contexts,
+      integration_types,
+      nsfw,
+      default_member_permissions,
+      dm_permission,
+    } = cmd || {};
+
+    function stripUndef(obj) {
+      if (obj === null || obj === undefined) return obj;
+      if (Array.isArray(obj)) {
+        return obj.map(stripUndef).filter((v) => v !== undefined);
+      }
+      if (typeof obj === "object") {
+        const out = {};
+        for (const k of Object.keys(obj)) {
+          const v = stripUndef(obj[k]);
+          if (v !== undefined) out[k] = v;
+        }
+        return out;
+      }
+      return obj;
+    }
+
+    function sortByName(arr) {
+      return [...arr].sort((a, b) => String(a?.name ?? "").localeCompare(String(b?.name ?? "")));
+    }
+
+    function sortPrimitive(arr) {
+      return [...arr].sort((a, b) => (a === b ? 0 : a < b ? -1 : 1));
+    }
+
+    function normalizeChoices(choices) {
+      if (!Array.isArray(choices)) return undefined;
+      const mapped = choices.map((c) => {
+        const { name, name_localizations, value } = c || {};
+        return stripUndef({ name, name_localizations, value });
+      });
+      const sorted = sortByName(mapped);
+      return sorted.length ? sorted : undefined;
+    }
+
+    function normalizeOption(opt) {
+      if (!opt) return opt;
+      const {
+        type,
+        name,
+        name_localizations,
+        description,
+        description_localizations,
+        required,
+        choices,
+        options,
+        channel_types,
+        autocomplete,
+        min_length,
+        max_length,
+        min_value,
+        max_value,
+      } = opt || {};
+
+      const norm = stripUndef({
+        type,
+        name,
+        name_localizations,
+        description,
+        description_localizations,
+        required: required ?? false,
+        choices: normalizeChoices(choices),
+        options: normalizeOptions(options),
+        channel_types: Array.isArray(channel_types) ? sortPrimitive(channel_types) : undefined,
+        autocomplete: autocomplete ?? false,
+        min_length,
+        max_length,
+        min_value,
+        max_value,
+      });
+      return norm;
+    }
+
+    function normalizeOptions(opts) {
+      if (!Array.isArray(opts)) return undefined;
+      const mapped = opts.map(normalizeOption);
+      const sorted = sortByName(mapped);
+      return sorted.length ? sorted : undefined;
+    }
+
+    function canonPerm(val) {
+      if (val === undefined || val === null) return null;
+      try {
+        if (typeof val === "string") return val;
+        if (typeof val === "number" || typeof val === "bigint") return String(val);
+        return String(val);
+      } catch {
+        return null;
+      }
+    }
+
+    function canonBool(val, defaultVal = null) {
+      if (val === undefined) return defaultVal;
+      if (val === null) return null;
+      return Boolean(val);
+    }
+
+    const norm = {
+      name,
+      description,
+      description_localizations,
+      type,
+      options: normalizeOptions(options),
+      contexts: Array.isArray(contexts) ? sortPrimitive(contexts) : contexts,
+      integration_types: Array.isArray(integration_types) ? sortPrimitive(integration_types) : integration_types,
+      nsfw: nsfw ?? false,
+      default_member_permissions: canonPerm(default_member_permissions),
+      dm_permission: canonBool(dm_permission, null),
+    };
+
+    return stripUndef(norm);
+  }
+
+  function deepEqualRelevant(a, b) {
+    try {
+      return JSON.stringify(normalizeForCompare(a)) === JSON.stringify(normalizeForCompare(b));
+    } catch (err) {
+      // If normalization or stringify throws, treat as different but don't crash
+      return false;
+    }
+  }
+
+  // Provide a lightweight reason for a mismatch to aid debugging
+  function diffReason(a, b) {
+    try {
+      const A = normalizeForCompare(a);
+      const B = normalizeForCompare(b);
+      const sa = JSON.stringify(A);
+      const sb = JSON.stringify(B);
+      if (sa === sb) return null;
+
+      // Top-level key diff
+      const keys = new Set([...Object.keys(A || {}), ...Object.keys(B || {})]);
+      for (const k of keys) {
+        try {
+          const va = JSON.stringify(A?.[k]);
+          const vb = JSON.stringify(B?.[k]);
+          if (va !== vb) {
+            // For options, add a hint about lengths to reduce noise
+            if (k === "options") {
+              const la = Array.isArray(A?.options) ? A.options.length : 0;
+              const lb = Array.isArray(B?.options) ? B.options.length : 0;
+              return `mismatch at 'options' (len local=${lb}, remote=${la})`;
+            }
+            return `mismatch at '${k}'`;
+          }
+        } catch {
+          // ignore nested stringify errors and fall through
+        }
+      }
+      return "mismatch (nested)";
+    } catch {
+      return "mismatch (exception during diff)";
+    }
+  }
+
   function buildNameMap(cmds) {
     const map = new Map();
     for (const c of cmds) {
@@ -195,6 +367,7 @@ export function createCommandHandler(client, logger, config) {
     return map;
   }
 
+  // Existing per-item upsert retained as "diff" strategy
   async function upsertCommands(rest, route, desiredCmds) {
     // Smart deploy: only create/update/remove changed commands
     // 1) Fetch existing commands
@@ -206,14 +379,20 @@ export function createCommandHandler(client, logger, config) {
     const toUpdate = [];
     const toDelete = [];
 
-    // Determine creates/updates
+    // Determine creates/updates using relevant-field comparison
     for (const [name, desired] of desiredByName.entries()) {
       const found = existingByName.get(name);
       if (!found) {
         toCreate.push(desired);
       } else {
-        // Compare JSON (stringify for simplicity)
-        if (JSON.stringify(found) !== JSON.stringify(desired)) {
+        if (!deepEqualRelevant(found, desired)) {
+          // Guard diffReason so diagnostics never throw
+          try {
+            const reason = diffReason(found, desired);
+            if (reason) logger.info(`Command '${name}' differs: ${reason}`);
+          } catch (e) {
+            logger.info(`Command '${name}' differs: mismatch (exception during diff)`);
+          }
           toUpdate.push({ id: found.id, body: desired });
         }
       }
@@ -226,7 +405,22 @@ export function createCommandHandler(client, logger, config) {
       }
     }
 
-    // Apply operations
+    // Short-circuit: if nothing to do, skip making any REST calls
+    if (toCreate.length === 0 && toUpdate.length === 0 && toDelete.length === 0) {
+      logger.info("No command changes detected; skipping deployment for this route");
+      return { created: 0, updated: 0, deleted: 0, skipped: true };
+    }
+
+    // Apply operations (or simulate in dry run)
+    const dry = isDryRun();
+    if (dry) {
+      logger.info(`DRY-RUN: would create ${toCreate.length}, update ${toUpdate.length}, delete ${toDelete.length} on route=${route}`);
+      if (toCreate.length) logger.info(`DRY-RUN creates: ${toCreate.map(c => c.name).join(", ")}`);
+      if (toUpdate.length) logger.info(`DRY-RUN updates: ${toUpdate.map(u => u.body?.name).join(", ")}`);
+      if (toDelete.length) logger.info(`DRY-RUN deletes: ${toDelete.length} ids`);
+      return { created: 0, updated: 0, deleted: 0, skipped: true, dryRun: true };
+    }
+
     for (const body of toCreate) {
       await rest.post(route, { body });
       logger.info(`Created command '${body.name}'`);
@@ -240,7 +434,40 @@ export function createCommandHandler(client, logger, config) {
       logger.info(`Deleted command id='${id}'`);
     }
 
-    return { created: toCreate.length, updated: toUpdate.length, deleted: toDelete.length };
+    return { created: toCreate.length, updated: toUpdate.length, deleted: toDelete.length, skipped: false, dryRun: false };
+  }
+
+  // Bulk strategy: single PUT that replaces the entire set
+  async function upsertCommandsBulk(rest, route, desiredCmds) {
+    const dry = isDryRun();
+    const start = Date.now();
+
+    if (dry) {
+      logger.info(`DRY-RUN: would BULK PUT ${desiredCmds.length} commands to route=${route}`);
+      return { created: 0, updated: 0, deleted: 0, duration: 0, dryRun: true };
+    }
+
+    await rest.put(route, { body: desiredCmds });
+    const duration = Date.now() - start;
+    // We don't get created/updated/deleted counts from Discord on bulk PUT.
+    // We'll infer zeroed counts here; delta is logged separately.
+    logger.info(`Bulk PUT completed in ${duration}ms (route=${route})`);
+    return { created: 0, updated: 0, deleted: 0, duration, dryRun: false };
+  }
+
+  function resolveStrategy() {
+    // Supports: bulk | diff | auto (defaults to bulk)
+    const val = (config.get("COMMAND_DEPLOY_STRATEGY") || "bulk").toString().trim().toLowerCase();
+    if (val === "bulk" || val === "diff" || val === "auto") return val;
+    return "bulk";
+  }
+
+  // Dry-run mode: when true, we will report what would change but perform no REST writes.
+  function isDryRun() {
+    // Accepts: true/1/yes/on via Config.getBool, or explicit string "true"
+    // Env key: COMMANDS_DRY_RUN
+    return config.getBool?.("COMMANDS_DRY_RUN", false) === true
+      || String(config.get("COMMANDS_DRY_RUN") || "").trim().toLowerCase() === "true";
   }
 
   async function installGuild(guildId) {
@@ -259,10 +486,30 @@ export function createCommandHandler(client, logger, config) {
       `Guild command deploy delta: +${delta.added.length} ~${delta.updated.length} -${delta.removed.length}`
     );
 
-    const result = await upsertCommands(rest, route, desired);
-    logger.info(
-      `Guild commands: created=${result.created}, updated=${result.updated}, deleted=${result.deleted}`
-    );
+    const strategy = resolveStrategy();
+    let result;
+
+    if (strategy === "diff") {
+      result = await upsertCommands(rest, route, desired);
+      if (result.skipped) {
+        const prefix = result.dryRun ? "Guild commands (diff, dry-run)" : "Guild commands (diff)";
+        logger.info(`${prefix}: no changes, skipped deployment`);
+      } else {
+        logger.info(`Guild commands (diff): created=${result.created}, updated=${result.updated}, deleted=${result.deleted}`);
+      }
+    } else {
+      // bulk or auto -> prefer no-op optimization: if no delta, skip PUT
+      if (delta.added.length === 0 && delta.updated.length === 0 && delta.removed.length === 0) {
+        const dry = isDryRun();
+        const prefix = dry ? "Guild commands (bulk, dry-run)" : "Guild commands (bulk)";
+        logger.info(`${prefix}: no changes detected; skipping bulk PUT`);
+        result = { created: 0, updated: 0, deleted: 0, skipped: true, dryRun: dry };
+      } else {
+        result = await upsertCommandsBulk(rest, route, desired);
+        const prefix = result.dryRun ? "Guild commands (bulk, dry-run)" : "Guild commands (bulk)";
+        logger.info(`${prefix}: created=${delta.added.length}, updated=${delta.updated.length}, deleted=${delta.removed.length}`);
+      }
+    }
 
     lastDeployedHashes = currentHashes;
   }
@@ -283,10 +530,37 @@ export function createCommandHandler(client, logger, config) {
       `Global command deploy delta: +${delta.added.length} ~${delta.updated.length} -${delta.removed.length}`
     );
 
-    const result = await upsertCommands(rest, route, desired);
-    logger.info(
-      `Global commands: created=${result.created}, updated=${result.updated}, deleted=${result.deleted} (propagation can take up to 1 hour)`
-    );
+    const strategy = resolveStrategy();
+    let result;
+
+    if (strategy === "diff") {
+      result = await upsertCommands(rest, route, desired);
+      if (result.skipped) {
+        const prefix = result.dryRun ? "Global commands (diff, dry-run)" : "Global commands (diff)";
+        logger.info(`${prefix}: no changes, skipped deployment (propagation can take up to 1 hour)`);
+      } else {
+        const prefix = result.bulkDiff
+          ? (result.dryRun ? "Global commands (diff, bulk-dry-run)" : "Global commands (diff, bulk)")
+          : "Global commands (diff)";
+        logger.info(
+          `${prefix}: created=${result.created}, updated=${result.updated}, deleted=${result.deleted} (propagation can take up to 1 hour)`
+        );
+      }
+    } else {
+      // bulk or auto -> prefer no-op optimization: if no delta, skip PUT
+      if (delta.added.length === 0 && delta.updated.length === 0 && delta.removed.length === 0) {
+        const dry = isDryRun();
+        const prefix = dry ? "Global commands (bulk, dry-run)" : "Global commands (bulk)";
+        logger.info(`${prefix}: no changes detected; skipping bulk PUT (propagation can take up to 1 hour)`);
+        result = { created: 0, updated: 0, deleted: 0, skipped: true, dryRun: dry };
+      } else {
+        result = await upsertCommandsBulk(rest, route, desired);
+        const prefix = result.dryRun ? "Global commands (bulk, dry-run)" : "Global commands (bulk)";
+        logger.info(
+          `${prefix}: created=${delta.added.length}, updated=${delta.updated.length}, deleted=${delta.removed.length} (propagation can take up to 1 hour)`
+        );
+      }
+    }
 
     lastDeployedHashes = currentHashes;
   }

@@ -13,14 +13,24 @@ The bot now supports **batched command deployment** for significantly faster sta
 
 ## Configuration
 
-Set `BATCH_COMMAND_DEPLOY=true` in your `.env` file (default behavior):
+Preferred: strategy selector via COMMAND_DEPLOY_STRATEGY (default bulk)
 
 ```bash
-# Fast batch deployment (recommended)
-BATCH_COMMAND_DEPLOY=true
+# Bulk replace in a single PUT (recommended)
+COMMAND_DEPLOY_STRATEGY=bulk
 
-# Slower individual deployment with detailed logging
-BATCH_COMMAND_DEPLOY=false
+# Per-item create/patch/delete (slower; granular logging)
+COMMAND_DEPLOY_STRATEGY=diff
+
+# Alias of bulk for both guild and global in this project
+COMMAND_DEPLOY_STRATEGY=auto
+```
+
+Legacy compatibility:
+
+```bash
+# If present, it will be ignored in favor of COMMAND_DEPLOY_STRATEGY
+# BATCH_COMMAND_DEPLOY=true|false
 ```
 
 ## How It Works
@@ -29,6 +39,11 @@ BATCH_COMMAND_DEPLOY=false
 ```javascript
 // Single API call overwrites all commands
 await rest.put(Routes.applicationCommands(appId), { body: allCommands });
+```
+
+In this codebase, bulk is used for both guild and global when:
+```text
+COMMAND_DEPLOY_STRATEGY = bulk | auto | undefined
 ```
 
 ### Individual Mode (Detailed)
@@ -55,33 +70,40 @@ for (const id of toDelete) await rest.delete(`${route}/${id}`);
 
 ## Command Change Detection
 
-The system still performs intelligent change detection to avoid unnecessary deployments:
+The system still performs intelligent change detection to provide clear telemetry and avoid unnecessary work:
 
 1. **Hash Calculation**: Each command is hashed to detect changes
 2. **Delta Analysis**: Compares current vs. last deployed state
-3. **Smart Deployment**: Only deploys when changes are detected
+3. **Strategy Execution**:
+   - bulk: Always PUT full command array once (fastest)
+   - diff: Per-item create/patch/delete (granular), using live fetch of existing commands
 
 ```javascript
 const delta = diffHashes(currentHashes);
 logger.info(`Deploy delta: +${delta.added.length} ~${delta.updated.length} -${delta.removed.length}`);
 ```
 
+Bulk summary logging uses the delta as the effective counts:
+```text
+Guild commands (bulk): created=+N, updated=~M, deleted=-K
+Global commands (bulk): created=+N, updated=~M, deleted=-K
+```
+
 ## Logging Output
 
 ### Batch Mode
 ```
-[INFO] Batch deploying 15 commands...
-[INFO] Batch deployment completed in 234ms
-[INFO] Guild commands (batch): created=15, updated=0, deleted=0, duration=234ms
+[INFO] Guild command deploy delta: +3 ~2 -1
+[INFO] Bulk PUT completed in 234ms (route=/applications/.../commands)
+[INFO] Guild commands (bulk): created=3, updated=2, deleted=1
 ```
 
 ### Individual Mode
 ```
-[INFO] Using individual command deployment (slower but detailed)...
+[INFO] Global command deploy delta: +1 ~1 -0
 [INFO] Created command 'play'
 [INFO] Updated command 'queue'
-[INFO] Deleted command id='123456789'
-[INFO] Guild commands (individual): created=1, updated=1, deleted=1, duration=3456ms
+[INFO] Global commands (diff): created=1, updated=1, deleted=0 (propagation can take up to 1 hour)
 ```
 
 ## Migration Notes
