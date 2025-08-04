@@ -77,7 +77,7 @@ export function createCommandHandler(client, logger, config) {
             const channelId = interaction.channelId;
             const channelType = interaction.channel?.type;
             const channelObjId = interaction.channel?.id;
-            logger.debug('[DEBUG] Interaction Channel Context', {
+            logger.info('[DEBUG] Interaction Channel Context', {
               channelId,
               channelType,
               channelObjId,
@@ -91,19 +91,6 @@ export function createCommandHandler(client, logger, config) {
                 options: interaction.options,
                 channelId: interaction.channelId
               }
-            });
-            // GLOBAL: Log every interaction's customId/componentType for troubleshooting
-            logger.debug('[DEBUG] Interaction Received', {
-              type: interaction.type,
-              customId: interaction.customId,
-              componentType: interaction.componentType,
-              isButton: interaction.isButton?.(),
-              isSelectMenu: interaction.isSelectMenu?.(),
-              isModalSubmit: interaction.isModalSubmit?.(),
-              isChatInputCommand: interaction.isChatInputCommand?.(),
-              isContextMenuCommand: interaction.isContextMenuCommand?.(),
-              userId: interaction.user?.id,
-              channelId: interaction.channelId
             });
           } catch (err) {
             logger.warn('[DEBUG] Failed to log interaction channel context:', err);
@@ -132,14 +119,7 @@ export function createCommandHandler(client, logger, config) {
           }
 
           // Legacy/compat routing
-          // Only return early if interaction is NOT a chat input, context menu, button, select menu, or modal
-          if (
-            !interaction.isChatInputCommand?.() &&
-            !interaction.isContextMenuCommand?.() &&
-            !interaction.isButton?.() &&
-            !interaction.isSelectMenu?.() &&
-            !interaction.isModalSubmit?.()
-          ) return;
+          if (!interaction.isChatInputCommand?.() && !interaction.isContextMenuCommand?.()) return;
           for (const h of Array.from(allHandlers)) {
             try {
               await h(interaction);
@@ -216,31 +196,7 @@ export function createCommandHandler(client, logger, config) {
   }
 
   async function upsertCommands(rest, route, desiredCmds) {
-    // Check if we should use batch deployment (default: true for speed)
-    const useBatchDeploy = config.get("BATCH_COMMAND_DEPLOY", "true") === "true";
-    
-    if (useBatchDeploy) {
-      // FAST PATH: Bulk overwrite all commands in one API call
-      logger.info(`Batch deploying ${desiredCmds.length} commands...`);
-      const startTime = Date.now();
-      
-      await rest.put(route, { body: desiredCmds });
-      
-      const duration = Date.now() - startTime;
-      logger.info(`Batch deployment completed in ${duration}ms`);
-      
-      return { 
-        created: desiredCmds.length, 
-        updated: 0, 
-        deleted: 0,
-        method: 'batch',
-        duration 
-      };
-    }
-
-    // LEGACY PATH: Individual command operations (slower but more granular logging)
-    logger.info("Using individual command deployment (slower but detailed)...");
-    
+    // Smart deploy: only create/update/remove changed commands
     // 1) Fetch existing commands
     const existing = await fetchExisting(rest, route);
     const existingByName = buildNameMap(existing);
@@ -271,7 +227,6 @@ export function createCommandHandler(client, logger, config) {
     }
 
     // Apply operations
-    const startTime = Date.now();
     for (const body of toCreate) {
       await rest.post(route, { body });
       logger.info(`Created command '${body.name}'`);
@@ -284,15 +239,8 @@ export function createCommandHandler(client, logger, config) {
       await rest.delete(`${route}/${id}`);
       logger.info(`Deleted command id='${id}'`);
     }
-    const duration = Date.now() - startTime;
 
-    return { 
-      created: toCreate.length, 
-      updated: toUpdate.length, 
-      deleted: toDelete.length,
-      method: 'individual',
-      duration 
-    };
+    return { created: toCreate.length, updated: toUpdate.length, deleted: toDelete.length };
   }
 
   async function installGuild(guildId) {
@@ -313,7 +261,7 @@ export function createCommandHandler(client, logger, config) {
 
     const result = await upsertCommands(rest, route, desired);
     logger.info(
-      `Guild commands (${result.method}): created=${result.created}, updated=${result.updated}, deleted=${result.deleted}, duration=${result.duration}ms`
+      `Guild commands: created=${result.created}, updated=${result.updated}, deleted=${result.deleted}`
     );
 
     lastDeployedHashes = currentHashes;
@@ -337,7 +285,7 @@ export function createCommandHandler(client, logger, config) {
 
     const result = await upsertCommands(rest, route, desired);
     logger.info(
-      `Global commands (${result.method}): created=${result.created}, updated=${result.updated}, deleted=${result.deleted}, duration=${result.duration}ms (propagation can take up to 1 hour)`
+      `Global commands: created=${result.created}, updated=${result.updated}, deleted=${result.deleted} (propagation can take up to 1 hour)`
     );
 
     lastDeployedHashes = currentHashes;
