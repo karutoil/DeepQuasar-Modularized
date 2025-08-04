@@ -6,6 +6,7 @@ function buildDefaultTicketControls(ticketId) {
     new ButtonBuilder().setCustomId(`tickets:control:transcript:${ticketId}`).setLabel("Transcript").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`tickets:control:addUser:${ticketId}`).setLabel("Add User").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`tickets:control:removeUser:${ticketId}`).setLabel("Remove User").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`tickets:control:assignSelf:${ticketId}`).setLabel("Assign to Me").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`tickets:control:transfer:${ticketId}`).setLabel("Transfer").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`tickets:control:reopen:${ticketId}`).setLabel("Reopen").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`tickets:control:close:${ticketId}`).setLabel("Close").setStyle(ButtonStyle.Danger)
@@ -96,6 +97,7 @@ export async function registerTicketControlHandlers(ctx) {
         title: "User Added to Ticket",
         description: `Added <@${uid}> by <@${interaction.user.id}>`,
         color: 0x57f287,
+        ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
       });
       await safeReply(interaction, { content: "User added.", flags: 64 });
       replied = true;
@@ -137,6 +139,7 @@ export async function registerTicketControlHandlers(ctx) {
         title: "Ticket Transferred",
         description: `Assigned to <@${assigneeId}> by <@${interaction.user.id}>`,
         color: 0x5865f2,
+        ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
       });
       // Update both embeds in the ticket channel to show new owner
       try {
@@ -292,7 +295,7 @@ export async function registerTicketControlHandlers(ctx) {
             title: "Ticket Closed",
             description: `Ticket ${ticket.ticketId} closed by <@${interaction.user.id}>.\nReason: ${reason || "N/A"}`,
             color: 0xed4245,
-            fields: [{ name: "Channel", value: `<#${ticket.channelId}>` }],
+            ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
           });
         } catch (e) {
           logger.warn("[Tickets] closeConfirm: sendLog error", { error: e?.message });
@@ -386,13 +389,16 @@ export async function registerTicketControlHandlers(ctx) {
           const messages = await channel.messages.fetch({ limit: 10 });
           const botMsg = messages.find(m => m.author.id === interaction.client.user.id && m.components?.length);
           if (botMsg) {
-            // Build new row with 'Unlock' button
+            // Build new row with 'Unlock' button and keep Assign to Me visible
             const row = new ActionRowBuilder().addComponents(
               new ButtonBuilder()
                 .setCustomId(`tickets:control:unlock:${ticket.ticketId}`)
                 .setLabel("Unlock")
                 .setStyle(ButtonStyle.Success),
-              // ...add other buttons as needed (optional: transcript, rename, etc.)
+              new ButtonBuilder()
+                .setCustomId(`tickets:control:assignSelf:${ticket.ticketId}`)
+                .setLabel("Assign to Me")
+                .setStyle(ButtonStyle.Primary),
             );
             await botMsg.edit({ components: [row] });
           }
@@ -404,6 +410,7 @@ export async function registerTicketControlHandlers(ctx) {
           title: "Ticket Locked",
           description: `Locked by <@${interaction.user.id}>`,
           color: 0xf1c40f,
+          ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
         });
         await safeReply(interaction, { content: "Ticket locked.", ephemeral: true });
       } catch (e) {
@@ -460,6 +467,7 @@ export async function registerTicketControlHandlers(ctx) {
           title: "Ticket Unlocked",
           description: `Unlocked by <@${interaction.user.id}>`,
           color: 0x57f287,
+          ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
         });
         await safeReply(interaction, { content: "Ticket unlocked.", ephemeral: true });
       } catch {
@@ -501,6 +509,7 @@ export async function registerTicketControlHandlers(ctx) {
             title: "Ticket Renamed",
             description: `Renamed by <@${interaction.user.id}> to ${name}`,
             color: 0x5865f2,
+            ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
           });
           await safeReply(interaction, { content: "Channel renamed.", ephemeral: true });
         } else {
@@ -527,6 +536,7 @@ export async function registerTicketControlHandlers(ctx) {
             description: `Requested by <@${interaction.user.id}>`,
             color: 0x5865f2,
             fields: [{ name: "URL", value: transcript.url }],
+            ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
           });
 
           // Optional metrics: transcript generated
@@ -633,6 +643,7 @@ export async function registerTicketControlHandlers(ctx) {
           title: "User Removed from Ticket",
           description: `Removed <@${uid}> by <@${interaction.user.id}>`,
           color: 0xed4245,
+          ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
         });
         await safeReply(interaction, { content: "User removed.", ephemeral: true });
       } catch {
@@ -840,6 +851,85 @@ interactions.registerSelectMenu(moduleName, "tickets:control:coreTestUserSelect:
     }, { prefix: true })
   );
 
+  // Assign to Me
+  disposers.push(
+    interactions.registerButton(moduleName, "tickets:control:assignSelf:", async (interaction) => {
+      try {
+        assertInGuild(interaction);
+        const guild = interaction.guild;
+        const member = interaction.member;
+        const meUserId = interaction.user.id;
+        const ticket = await getTicketByChannel(ctx, interaction.guildId, interaction.channelId);
+        if (!ticket) return safeReply(interaction, { content: "Not a ticket channel.", ephemeral: true });
+
+        // Permission: support role OR ManageGuild OR guild owner
+        const settings = await getGuildSettings(ctx, interaction.guildId);
+        const supportRoleIds = settings?.supportRoleIds || [];
+        const hasSupportRole = Array.isArray(member?.roles?.cache)
+          ? member.roles.cache.some(r => supportRoleIds.includes(r.id))
+          : (member?.roles?.cache?.some?.(r => supportRoleIds.includes(r.id)) ?? false);
+        const isManager = interaction.memberPermissions?.has?.("ManageGuild");
+        const isOwner = guild?.ownerId === meUserId;
+        if (!hasSupportRole && !isManager && !isOwner) {
+          return safeReply(interaction, { content: "You cannot assign this ticket to yourself.", ephemeral: true });
+        }
+
+        const currentAssignee = ticket.assigneeId || null;
+        // Reassignment rules: permitted if no assignee OR you are current assignee OR ManageGuild OR owner
+        const canReassign = !currentAssignee || currentAssignee === meUserId || isManager || isOwner;
+        if (!canReassign) {
+          return safeReply(interaction, { content: "Only the current assignee, administrators, or the server owner can reassign this ticket.", ephemeral: true });
+        }
+
+        const updated = await updateTicket(ctx, interaction.guildId, ticket.ticketId, { assigneeId: meUserId });
+        const newDoc = updated?.value || updated; // handle findOneAndUpdate return vs doc
+        // Update recent bot embeds to reflect assignee like transfer flow
+        try {
+          const channel = await interaction.client.channels.fetch(ticket.channelId).catch(() => null);
+          if (channel) {
+            const messages = await channel.messages.fetch({ limit: 20 });
+            const botMessages = messages.filter(m => m.author.id === interaction.client.user.id && m.embeds?.length);
+            const toUpdate = Array.from(botMessages.values()).slice(0, 2);
+            for (const msg of toUpdate) {
+              const embed = msg.embeds[0];
+              if (embed) {
+                const newEmbed = EmbedBuilder.from(embed);
+                const fields = newEmbed.data.fields || [];
+                let found = false;
+                for (let f of fields) {
+                  if (f.name.toLowerCase().includes("owner") || f.name.toLowerCase().includes("assignee")) {
+                    f.value = `<@${meUserId}>`;
+                    found = true;
+                  }
+                }
+                if (!found) {
+                  fields.push({ name: "Assignee", value: `<@${meUserId}>`, inline: true });
+                }
+                newEmbed.setFields(fields);
+                await msg.edit({ embeds: [newEmbed] });
+              }
+            }
+          }
+        } catch (e) {
+          logger.warn("[Tickets] assignSelf: failed to update embeds after assignment", { error: e?.message });
+        }
+
+        // Audit log
+        await sendLog(ctx, interaction.guildId, {
+          title: currentAssignee && currentAssignee !== meUserId ? "Ticket Reassigned" : "Ticket Assigned",
+          description: `Assigned to <@${meUserId}> by <@${interaction.user.id}>`,
+          color: 0x5865f2,
+          ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
+        });
+
+        await safeReply(interaction, { content: "Assigned to you.", ephemeral: true });
+      } catch (e) {
+        logger.error("[Tickets] assignSelf error", { error: e?.message, stack: e?.stack });
+        await safeReply(interaction, { content: "Failed to assign the ticket.", ephemeral: true });
+      }
+    }, { prefix: true })
+  );
+
   // Reopen
   disposers.push(
     interactions.registerButton(moduleName, "tickets:control:reopen:", async (interaction) => {
@@ -859,6 +949,7 @@ interactions.registerSelectMenu(moduleName, "tickets:control:coreTestUserSelect:
           title: "Ticket Reopened",
           description: `Reopened by <@${interaction.user.id}>`,
           color: 0x57f287,
+          ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
         });
 
         // Optional metrics: ticket reopened

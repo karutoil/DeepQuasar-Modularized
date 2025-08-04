@@ -2,7 +2,37 @@
 import { EmbedBuilder } from "discord.js";
 import { getGuildSettings } from "./settingsService.js";
 
-export async function sendLog(ctx, guildId, { title, description, color = 0x2f3136, fields = [], footer, timestamp = true }) {
+/**
+ * Append a standardized "Ticket" field with value "<#channelId> · ID: ticketId" (inline)
+ * If either channelId or ticketId is missing, falls back to "ID: ticketId" or "Channel: <#channelId>"
+ */
+export function withTicketField(fields = [], ticketCtx = {}) {
+  try {
+    const safeFields = Array.isArray(fields) ? [...fields] : [];
+    const channelId = ticketCtx?.channelId;
+    const ticketId = ticketCtx?.ticketId;
+    let value = null;
+    if (channelId && ticketId) {
+      value = `<#${channelId}> · ID: ${ticketId}`;
+    } else if (channelId) {
+      value = `<#${channelId}>`;
+    } else if (ticketId) {
+      value = `ID: ${ticketId}`;
+    }
+    if (value) {
+      // Ensure we don't exceed 25 fields; reserve one slot by trimming first if needed
+      const trimmed = safeFields.slice(0, 24);
+      trimmed.push({ name: "Ticket", value, inline: true });
+      return trimmed;
+    }
+    return safeFields.slice(0, 25);
+  } catch {
+    // On any unexpected error, just return original fields bounded to 25
+    return (Array.isArray(fields) ? fields : []).slice(0, 25);
+  }
+}
+
+export async function sendLog(ctx, guildId, { title, description, color = 0x2f3136, fields = [], footer, timestamp = true, ticket }) {
   const { client, logger } = ctx;
   try {
     const settings = await getGuildSettings(ctx, guildId);
@@ -12,10 +42,13 @@ export async function sendLog(ctx, guildId, { title, description, color = 0x2f31
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if (!channel || !channel.send) return false;
 
+    // Attach standardized Ticket field if ticket context provided
+    const finalFields = ticket ? withTicketField(fields, ticket) : (fields?.slice(0, 25) || []);
+
     const embed = new EmbedBuilder().setColor(color);
     if (title) embed.setTitle(title);
     if (description) embed.setDescription(description);
-    if (fields?.length) embed.setFields(fields.slice(0, 25));
+    if (finalFields?.length) embed.setFields(finalFields);
     if (timestamp) embed.setTimestamp(new Date());
     if (footer) embed.setFooter(footer);
 
