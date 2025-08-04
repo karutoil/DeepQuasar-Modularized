@@ -59,7 +59,7 @@ export async function registerTicketControlHandlers(ctx) {
   }
   // ...existing code...
 
-  // Always register addUserSelect handler at startup
+  // Always register addUserSelect handler at startup (canonical - remove duplicates below)
   const disposerAddUserSelect = interactions.registerSelectMenu(moduleName, "tickets:control:addUserSelect:", async (interaction) => {
     let replied = false;
     try {
@@ -115,7 +115,7 @@ export async function registerTicketControlHandlers(ctx) {
   }, { prefix: true });
   disposers.push(disposerAddUserSelect);
 
-  // Always register transferSelect handler at startup
+  // Always register transferSelect handler at startup (canonical - remove duplicates below)
   const disposerTransferSelect = interactions.registerSelectMenu(moduleName, "tickets:control:transferSelect:", async (interaction) => {
     let replied = false;
     try {
@@ -141,6 +141,26 @@ export async function registerTicketControlHandlers(ctx) {
         color: 0x5865f2,
         ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
       });
+      // DM the assignee if enabled
+      try {
+        const settings = await (await import("../services/settingsService.js")).getGuildSettings(ctx, interaction.guildId);
+        if (settings?.dmNotifications?.assign) {
+          const userToDM = await interaction.client.users.fetch(assigneeId).catch(() => null);
+          if (userToDM) {
+            const embed = new (await import("discord.js")).EmbedBuilder()
+              .setTitle("Ticket Update")
+              .setColor(0x5865f2)
+              .addFields(
+                { name: "Ticket", value: `<#${ticket.channelId}> · ID: ${ticket.ticketId}`, inline: false },
+                { name: "Action", value: `Assigned to you`, inline: true },
+                { name: "Server", value: `${interaction.guild?.name || interaction.guildId}`, inline: true },
+                { name: "Performed By", value: `<@${interaction.user.id}>`, inline: true },
+              )
+              .setTimestamp(new Date());
+            await userToDM.send({ embeds: [embed] }).catch(() => {});
+          }
+        }
+      } catch (e) { ctx.logger?.warn?.("[Tickets] DM assign failed", { error: e?.message }); }
       // Update both embeds in the ticket channel to show new owner
       try {
         const channel = await interaction.client.channels.fetch(ticket.channelId).catch(() => null);
@@ -273,20 +293,29 @@ export async function registerTicketControlHandlers(ctx) {
           logger.error("[Tickets] closeConfirm: finalizeClosed error", { error: e?.message, stack: e?.stack });
         }
 
-        // DM opener if configured
+        // DM opener if configured (controlled by dmNotifications.close; include transcript link if available)
         try {
           const settings = await getGuildSettings(ctx, guildId);
-          if (settings?.transcript?.dmUser) {
+          if (settings?.dmNotifications?.close) {
             const user = await client.users.fetch(ticket.openerId).catch(() => null);
             if (user) {
               const msg = transcript?.url
                 ? `Your ticket has been closed.\nReason: ${reason || "No reason provided"}\nTranscript: ${transcript.url}`
                 : `Your ticket has been closed.\nReason: ${reason || "No reason provided"}`;
-              await user.send(msg).catch(() => {});
+              await user.send(msg).catch((err) => {
+                logger?.warn?.("[Tickets] DM close failed", {
+                  error: err?.message,
+                  code: err?.code,
+                  guildId,
+                  ticketId: ticket.ticketId,
+                  channelId: ticket.channelId,
+                  userId: ticket.openerId
+                });
+              });
             }
           }
         } catch (e) {
-          logger.warn("[Tickets] closeConfirm: DM error", { error: e?.message });
+          logger.warn("[Tickets] closeConfirm: DM error", { error: e?.message, guildId, ticketId: ticket.ticketId, channelId: ticket.channelId });
         }
 
         // Log
@@ -645,6 +674,37 @@ export async function registerTicketControlHandlers(ctx) {
           color: 0xed4245,
           ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
         });
+        // DM the removed user if enabled
+        try {
+          const settings = await getGuildSettings(ctx, interaction.guildId);
+          if (settings?.dmNotifications?.userRemoved) {
+            const removedUser = await interaction.client.users.fetch(uid).catch(() => null);
+            if (removedUser) {
+              const embed = new EmbedBuilder()
+                .setTitle("Ticket Update")
+                .setColor(0xed4245)
+                .addFields(
+                  { name: "Ticket", value: `<#${ticket.channelId}> · ID: ${ticket.ticketId}`, inline: false },
+                  { name: "Action", value: `You were removed from the ticket`, inline: true },
+                  { name: "Server", value: `${interaction.guild?.name || interaction.guildId}`, inline: true },
+                  { name: "Performed By", value: `<@${interaction.user.id}>`, inline: true },
+                )
+                .setTimestamp(new Date());
+              await removedUser.send({ embeds: [embed] }).catch((err) => {
+                ctx.logger?.warn?.("[Tickets] DM userRemoved failed", {
+                  error: err?.message,
+                  code: err?.code,
+                  guildId: interaction.guildId,
+                  ticketId: ticket.ticketId,
+                  channelId: ticket.channelId,
+                  userId: uid
+                });
+              });
+            }
+          }
+        } catch (e) {
+          ctx.logger?.warn?.("[Tickets] userRemoved DM error", { error: e?.message });
+        }
         await safeReply(interaction, { content: "User removed.", ephemeral: true });
       } catch {
         await safeReply(interaction, { content: "Failed to remove user.", ephemeral: true });
@@ -675,181 +735,7 @@ export async function registerTicketControlHandlers(ctx) {
     }, { prefix: true })
   );
 
-  disposers.push(
-    interactions.registerModal(moduleName, "tickets:control:transferModal:", async (interaction) => {
-      // Remove modal handler for transfer
-  // Add User select menu handler
-  // Register addUserSelect handler and log registration
-  const disposerAddUserSelect = interactions.registerSelectMenu(moduleName, "tickets:control:addUserSelect:", async (interaction) => {
-    ctx.logger.debug("[Tickets] addUserSelect handler entry", {
-      customId: interaction.customId,
-      componentType: interaction.componentType,
-      isUserSelectMenu: typeof interaction.isUserSelectMenu === "function" ? interaction.isUserSelectMenu() : undefined,
-      isAnySelectMenu: typeof interaction.isAnySelectMenu === "function" ? interaction.isAnySelectMenu() : undefined,
-      values: interaction.values,
-      type: interaction.type,
-      guildId: interaction.guildId,
-      channelId: interaction.channelId,
-      userId: interaction.user?.id,
-      member: interaction.member,
-      clientUserId: interaction.client?.user?.id
-    });
-    let replied = false;
-    try {
-      ctx.logger.debug("[Tickets] addUserSelect before isUserSelect check", {
-        customId: interaction.customId,
-        componentType: interaction.componentType,
-        values: interaction.values
-      });
-      const isUserSelect = (typeof interaction.isUserSelectMenu === "function" && interaction.isUserSelectMenu()) || interaction.componentType === 5;
-      ctx.logger.debug("[Tickets] addUserSelect after isUserSelect check", { isUserSelect });
-      if (!isUserSelect) {
-        ctx.logger.warn("[Tickets] addUserSelect: not a user select menu", { customId: interaction.customId, componentType: interaction.componentType });
-        await safeReply(interaction, { content: "Not a user select menu.", flags: 64 });
-        replied = true;
-        return;
-      }
-      ctx.logger.debug("[Tickets] addUserSelect triggered", { customId: interaction.customId, values: interaction.values, componentType: interaction.componentType });
-      const parts = interaction.customId.split(":");
-      ctx.logger.debug("[Tickets] addUserSelect after customId split", { parts });
-      const ticketId = parts[3];
-      const uid = interaction.values[0];
-      ctx.logger.debug("[Tickets] addUserSelect extracted", { ticketId, uid });
-      ctx.logger.debug("[Tickets] addUserSelect before updateTicket", { ctx, guildId: interaction.guildId, ticketId });
-      const ticket = await updateTicket(ctx, interaction.guildId, ticketId, {});
-      ctx.logger.debug("[Tickets] addUserSelect after updateTicket", { ticket });
-      if (!ticket) {
-        ctx.logger.warn("[Tickets] addUserSelect: ticket not found", { ticketId, guildId: interaction.guildId });
-        await safeReply(interaction, { content: "Ticket not found.", flags: 64 });
-        replied = true;
-        return;
-      }
-      ctx.logger.debug("[Tickets] addUserSelect before channel fetch", { channelId: ticket.channelId });
-      const channel = await interaction.client.channels.fetch(ticket.channelId).catch((err) => { ctx.logger.error("[Tickets] addUserSelect channel fetch error", { error: err?.message }); return null; });
-      ctx.logger.debug("[Tickets] addUserSelect after channel fetch", { channel });
-      if (!channel) {
-        ctx.logger.warn("[Tickets] addUserSelect: channel not found", { channelId: ticket.channelId });
-        await safeReply(interaction, { content: "Channel not found.", flags: 64 });
-        replied = true;
-        return;
-      }
-      ctx.logger.debug("[Tickets] addUserSelect before addParticipant", { ticketId, uid });
-      await addParticipant(ctx, interaction.guildId, ticket.ticketId, uid);
-      ctx.logger.debug("[Tickets] addUserSelect after addParticipant", { ticketId, uid });
-      ctx.logger.debug("[Tickets] addUserSelect before permissionOverwrites.edit", { channelId: channel.id, uid });
-      await channel.permissionOverwrites.edit(uid, {
-        ViewChannel: true,
-        SendMessages: true,
-        ReadMessageHistory: true,
-      }).catch((err) => { ctx.logger.error("[Tickets] addUserSelect permissionOverwrites error", { error: err?.message }); });
-      ctx.logger.debug("[Tickets] addUserSelect after permissionOverwrites.edit", { channelId: channel.id, uid });
-      ctx.logger.debug("[Tickets] addUserSelect before sendLog", { ticketId, uid });
-      await sendLog(ctx, interaction.guildId, {
-        title: "User Added to Ticket",
-        description: `Added <@${uid}> by <@${interaction.user.id}>`,
-        color: 0x57f287,
-      });
-      ctx.logger.debug("[Tickets] addUserSelect after sendLog", { ticketId, uid });
-      await safeReply(interaction, { content: "User added.", flags: 64 });
-      replied = true;
-      ctx.logger.debug("[Tickets] addUserSelect after safeReply", { ticketId, uid });
-    } catch (e) {
-      ctx.logger.error("[Tickets] addUserSelect error", { error: e?.message, stack: e?.stack });
-      if (!replied) {
-        try { await safeReply(interaction, { content: "Failed to add user. " + (e?.message || ""), flags: 64 }); } catch {}
-      }
-    } finally {
-      // If still not replied, send a fallback
-      if (!replied) {
-        try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch {}
-      }
-    }
-  }, { prefix: true });
-  ctx.logger.info("[Tickets] addUserSelect handler registered for prefix tickets:control:addUserSelect:");
-  // Log selectPrefixesByModule keys for debugging
-  if (interactions._debug && interactions._debug.selectPrefixesByModule) {
-    const selectPrefixes = interactions._debug.selectPrefixesByModule;
-    ctx.logger.info("[Tickets] selectPrefixesByModule keys", { keys: Array.from(selectPrefixes.keys()), tickets: Array.from(selectPrefixes.get("tickets")?.keys() || []) });
-  }
-  disposers.push(disposerAddUserSelect);
-  
-  // Transfer select menu handler
-  disposers.push(
-    interactions.registerSelectMenu(moduleName, "tickets:control:transferSelect:", async (interaction) => {
-      ctx.logger.debug("[Tickets] transferSelect handler entry", {
-        customId: interaction.customId,
-        componentType: interaction.componentType,
-        isUserSelectMenu: typeof interaction.isUserSelectMenu === "function" ? interaction.isUserSelectMenu() : undefined,
-        isAnySelectMenu: typeof interaction.isAnySelectMenu === "function" ? interaction.isAnySelectMenu() : undefined,
-        values: interaction.values,
-        type: interaction.type
-      });
-      let replied = false;
-      try {
-        ctx.logger.debug("[Tickets] transferSelect before isUserSelect check");
-        const isUserSelect = (typeof interaction.isUserSelectMenu === "function" && interaction.isUserSelectMenu()) || interaction.componentType === 5;
-        ctx.logger.debug("[Tickets] transferSelect after isUserSelect check", { isUserSelect });
-        if (!isUserSelect) {
-          ctx.logger.warn("[Tickets] transferSelect: not a user select menu", { customId: interaction.customId, componentType: interaction.componentType });
-          await safeReply(interaction, { content: "Not a user select menu.", flags: 64 });
-          replied = true;
-          return;
-        }
-        ctx.logger.debug("[Tickets] transferSelect triggered", { customId: interaction.customId, values: interaction.values, componentType: interaction.componentType });
-        const parts = interaction.customId.split(":");
-        ctx.logger.debug("[Tickets] transferSelect after customId split", { parts });
-        const ticketId = parts[3];
-        const assigneeId = interaction.values[0];
-        ctx.logger.debug("[Tickets] transferSelect extracted", { ticketId, assigneeId });
-        ctx.logger.debug("[Tickets] transferSelect before updateTicket");
-        const ticket = await updateTicket(ctx, interaction.guildId, ticketId, { assigneeId });
-        ctx.logger.debug("[Tickets] transferSelect after updateTicket", { ticket });
-        if (!ticket) {
-          await safeReply(interaction, { content: "Ticket not found.", flags: 64 });
-          replied = true;
-          return;
-        }
-        ctx.logger.debug("[Tickets] transferSelect before sendLog");
-        await sendLog(ctx, interaction.guildId, {
-          title: "Ticket Transferred",
-          description: `Assigned to <@${assigneeId}> by <@${interaction.user.id}>`,
-          color: 0x5865f2,
-        });
-        ctx.logger.debug("[Tickets] transferSelect after sendLog", { ticketId, assigneeId });
-        await safeReply(interaction, { content: "Ticket transferred.", flags: 64 });
-        replied = true;
-        ctx.logger.debug("[Tickets] transferSelect after safeReply", { ticketId, assigneeId });
-      } catch (e) {
-        ctx.logger.error("[Tickets] transferSelect error", { error: e?.message, stack: e?.stack });
-        if (!replied) {
-          try { await safeReply(interaction, { content: "Transfer failed. " + (e?.message || ""), flags: 64 }); } catch {}
-        }
-      } finally {
-        // If still not replied, send a fallback
-        if (!replied) {
-          try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch {}
-        }
-      }
-// Minimal UserSelectMenu handler for core validation
-interactions.registerSelectMenu(moduleName, "tickets:control:coreTestUserSelect:", async (interaction) => {
-  ctx.logger.debug("[Tickets] coreTestUserSelect handler entry", {
-    customId: interaction.customId,
-    componentType: interaction.componentType,
-    isUserSelectMenu: typeof interaction.isUserSelectMenu === "function" ? interaction.isUserSelectMenu() : undefined,
-    values: interaction.values,
-    type: interaction.type
-  });
-  try {
-    await safeReply(interaction, { content: `Selected user: ${interaction.values[0]}`, flags: 64 });
-    ctx.logger.debug("[Tickets] coreTestUserSelect safeReply sent");
-  } catch (e) {
-    ctx.logger.error("[Tickets] coreTestUserSelect error", { error: e?.message });
-  }
-});
-    }, { prefix: true })
-  );
-    }, { prefix: true })
-  );
+  // Removed duplicate debug modal and redundant handler registrations
 
   // Assign to Me
   disposers.push(
@@ -921,6 +807,37 @@ interactions.registerSelectMenu(moduleName, "tickets:control:coreTestUserSelect:
           color: 0x5865f2,
           ticket: { channelId: ticket.channelId, ticketId: ticket.ticketId },
         });
+        // DM the new assignee (self) if enabled to mirror transfer flow
+        try {
+          const settings = await getGuildSettings(ctx, interaction.guildId);
+          if (settings?.dmNotifications?.assign) {
+            const userToDM = await interaction.client.users.fetch(meUserId).catch(() => null);
+            if (userToDM) {
+              const embed = new EmbedBuilder()
+                .setTitle("Ticket Update")
+                .setColor(0x5865f2)
+                .addFields(
+                  { name: "Ticket", value: `<#${ticket.channelId}> · ID: ${ticket.ticketId}`, inline: false },
+                  { name: "Action", value: `Assigned to you`, inline: true },
+                  { name: "Server", value: `${interaction.guild?.name || interaction.guildId}`, inline: true },
+                  { name: "Performed By", value: `<@${interaction.user.id}>`, inline: true },
+                )
+                .setTimestamp(new Date());
+              await userToDM.send({ embeds: [embed] }).catch((err) => {
+                logger?.warn?.("[Tickets] DM assignSelf failed", {
+                  error: err?.message,
+                  code: err?.code,
+                  guildId: interaction.guildId,
+                  ticketId: ticket.ticketId,
+                  channelId: ticket.channelId,
+                  userId: meUserId
+                });
+              });
+            }
+          }
+        } catch (e) {
+          logger?.warn?.("[Tickets] assignSelf DM error", { error: e?.message });
+        }
 
         await safeReply(interaction, { content: "Assigned to you.", ephemeral: true });
       } catch (e) {

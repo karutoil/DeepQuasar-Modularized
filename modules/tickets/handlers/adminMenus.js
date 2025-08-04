@@ -178,6 +178,60 @@ export async function registerAdminMenus(ctx) {
     })
   );
 
+  // Ticket name format modal
+  disposers.push(
+    interactions.registerButton(moduleName, "tickets:general:nameFormat", async (interaction) => {
+      const { assertInGuild, requireManageGuild, safeReply } = await import("../utils/validators.js");
+      try {
+        assertInGuild(interaction); requireManageGuild(interaction);
+        const modal = new ModalBuilder()
+          .setCustomId("tickets:general:nameFormatModal")
+          .setTitle("Ticket Name Format");
+
+        const fmt = new TextInputBuilder()
+          .setCustomId("format")
+          .setLabel("Format string")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setPlaceholder("ticket-{userid}-{shortdate}");
+
+        const help = new TextInputBuilder()
+          .setCustomId("help")
+          .setLabel("Placeholders (read-only)")
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false)
+          .setValue("{username},{user_tag},{userid},{type},{count},{date},{time},{shortdate},{timestamp},{server},{channel_id},{ticket_id}")
+          .setPlaceholder("See description")
+          .setMaxLength(400)
+          ;
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(fmt),
+          new ActionRowBuilder().addComponents(help),
+        );
+        await interaction.showModal(modal);
+      } catch {
+        await safeReply(interaction, { content: "Cannot open ticket name format modal.", ephemeral: true });
+      }
+    })
+  );
+
+  disposers.push(
+    interactions.registerModal(moduleName, "tickets:general:nameFormatModal", async (interaction) => {
+      const { assertInGuild, requireManageGuild, safeReply } = await import("../utils/validators.js");
+      try {
+        assertInGuild(interaction); requireManageGuild(interaction);
+        const format = interaction.fields.getTextInputValue("format")?.trim();
+        const patch = {};
+        if (format) patch.ticketNameFormat = format.slice(0, 200);
+        await upsertGuildSettings(ctx, interaction.guildId, patch);
+        await safeReply(interaction, { content: `Ticket name format ${format ? "saved" : "cleared to default"}.`, ephemeral: true });
+      } catch {
+        await safeReply(interaction, { content: "Failed to save ticket name format.", ephemeral: true });
+      }
+    })
+  );
+
   // Auto-closure options modal
   disposers.push(
     interactions.registerButton(moduleName, "tickets:general:autoClose", async (interaction) => {
@@ -593,13 +647,14 @@ async function showGeneralSettings(ctx, interaction) {
   const embed = new EmbedBuilder()
     .setTitle("Tickets — General Settings")
     .setColor(0x2f3136)
-    .setDescription("Configure ticket category, log channel, support roles, transcripts, and auto-closure.")
+    .setDescription("Configure ticket category, log channel, support roles, transcripts, auto-closure, and naming format.")
     .addFields(
       { name: "Ticket Category", value: settings.ticketCategoryId ? `<#${settings.ticketCategoryId}>` : "Not set", inline: true },
       { name: "Log Channel", value: settings.ticketLogChannelId ? `<#${settings.ticketLogChannelId}>` : "Not set", inline: true },
       { name: "Support Roles", value: (settings.supportRoleIds?.map(id => `<@&${id}>`).join(", ") || "None"), inline: false },
       { name: "Transcript", value: `Format: ${settings.transcript.format} • DM: ${settings.transcript.dmUser ? "yes" : "no"}`, inline: true },
       { name: "Auto-Closure", value: `Inactive: ${settings.autoClosure.inactivityMs} ms • Warning: ${settings.autoClosure.warningMs} ms`, inline: true },
+      { name: "Ticket Name Format", value: `\`${settings.ticketNameFormat || "ticket-{userid}-{shortdate}"}\`\nPlaceholders: {username},{user_tag},{userid},{type},{count},{date},{time},{shortdate},{timestamp},{server},{channel_id},{ticket_id}`, inline: false },
     );
 
   const rows = [];
@@ -635,6 +690,10 @@ async function showGeneralSettings(ctx, interaction) {
     new ButtonBuilder()
       .setCustomId("tickets:general:autoClose")
       .setLabel("Auto-Closure Settings")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId("tickets:general:nameFormat")
+      .setLabel("Ticket Name Format")
       .setStyle(ButtonStyle.Secondary),
   );
   rows.push(row4);

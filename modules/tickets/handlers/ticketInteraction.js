@@ -132,6 +132,7 @@ export async function registerTicketInteractionHandlers(ctx) {
         const user = interaction.user;
         const guildId = interaction.guildId;
 
+        // Title is now informational only; does not affect channel name
         const title = interaction.fields.getTextInputValue("title")?.trim()?.slice(0, 100);
         const description = interaction.fields.getTextInputValue("description")?.trim()?.slice(0, 1800);
 
@@ -141,9 +142,71 @@ export async function registerTicketInteractionHandlers(ctx) {
           return safeReply(interaction, { content: "Ticket category is not configured by admins yet.", ephemeral: true });
         }
 
-        // Create channel name safe
-        const base = (title || "ticket").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "ticket";
-        const channelName = `ticket-${base}`;
+        // Compute channel name from global format, ignoring modal title
+        function pad2(n) { return String(n).padStart(2, "0"); }
+        function sanitizeChannelName(s) {
+          return (s || "ticket")
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, "-")
+            .replace(/-+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 100) || "ticket";
+        }
+        async function nextTicketCount(ctx, guildId) {
+          try {
+            const db = await ctx.mongo.getDb();
+            const res = await db.collection("guild_ticket_counters").findOneAndUpdate(
+              { guildId },
+              { $inc: { count: 1 }, $setOnInsert: { guildId, createdAt: new Date() } },
+              { upsert: true, returnDocument: "after" }
+            );
+            // driver returns {value} sometimes; normalize
+            return (res?.value?.count) || res?.count || 1;
+          } catch {
+            return 1;
+          }
+        }
+        function formatTicketName(fmt, ctxObj) {
+          const now = new Date();
+          const yyyy = String(now.getFullYear());
+          const mm = pad2(now.getMonth() + 1);
+          const dd = pad2(now.getDate());
+          const HH = pad2(now.getHours());
+          const MM = pad2(now.getMinutes());
+          const SS = pad2(now.getSeconds());
+          const shortdate = `${mm}${dd}`;
+          const ts = Math.floor(now.getTime() / 1000);
+          let out = String(fmt || "ticket-{userid}-{shortdate}");
+          out = out.replace(/\{username\}/g, ctxObj.username || "");
+          out = out.replace(/\{user_tag\}/g, ctxObj.user_tag || "");
+          out = out.replace(/\{userid\}/g, ctxObj.userid || "");
+          out = out.replace(/\{type\}/g, ctxObj.type || "");
+          out = out.replace(/\{count\}/g, String(ctxObj.count ?? ""));
+          out = out.replace(/\{date\}/g, `${yyyy}-${mm}-${dd}`);
+          out = out.replace(/\{time\}/g, `${HH}-${MM}-${SS}`);
+          out = out.replace(/\{shortdate\}/g, shortdate);
+          out = out.replace(/\{timestamp\}/g, String(ts));
+          out = out.replace(/\{server\}/g, ctxObj.server || "");
+          out = out.replace(/\{channel_id\}/g, ctxObj.channel_id || "");
+          out = out.replace(/\{ticket_id\}/g, ctxObj.ticket_id || "");
+          return out;
+        }
+        const count = await nextTicketCount(ctx, guildId);
+        const provisional = sanitizeChannelName(
+          formatTicketName(
+            (settings.ticketNameFormat || "ticket-{userid}-{shortdate}").replace(/\{channel_id\}/g, ""), // strip channel_id for provisional
+            {
+              username: user.username,
+              user_tag: `${user.username}${user.discriminator ? "#" + user.discriminator : ""}`,
+              userid: user.id,
+              type: "", // resolved after getType below
+              count,
+              server: guild?.name || "",
+              ticket_id: "pending",
+            }
+          )
+        );
+        let channelName = provisional || "ticket";
 
         // Compute permission overwrites using centralized helper for consistency
         const { buildBaseOverwrites } = await import("../utils/permissions.js");
@@ -223,6 +286,36 @@ export async function registerTicketInteractionHandlers(ctx) {
           logger.warn("[Tickets] getType error", { typeId, error: e?.message });
         }
 
+        // After type resolved, possibly rename with full format including type/channel_id/ticket_id
+        try {
+          const fullNameRaw = formatTicketName(settings.ticketNameFormat || "ticket-{userid}-{shortdate}", {
+            username: user.username,
+            user_tag: `${user.username}${user.discriminator ? "#" + user.discriminator : ""}`,
+            userid: user.id,
+            type: typeDoc?.name || (typeDoc === null ? "Unknown Type" : typeId || "default"),
+            count,
+            server: guild?.name || "",
+            channel_id: channel.id,
+            ticket_id: doc.ticketId,
+          });
+          const fullName = sanitizeChannelName(fullNameRaw);
+          if (fullName && fullName !== channel.name && channel.manageable) {
+            await channel.setName(fullName, "Apply configured ticket naming format");
+          }
+          try {
+            const { sendLog } = await import("../services/loggingService.js");
+            await sendLog(ctx, guildId, {
+              title: "Ticket Channel Named",
+              description: `Generated by configured format`,
+              color: 0x2f3136,
+              fields: [
+                { name: "Result", value: `\`${fullName}\``, inline: true },
+                { name: "Format", value: `\`${settings.ticketNameFormat || "ticket-{userid}-{shortdate}"}\``, inline: false },
+              ],
+              ticket: { channelId: channel.id, ticketId: doc.ticketId },
+            });
+          } catch {}
+        } catch {}
         // Initial message in ticket channel
         const typeLabel = typeDoc?.name || (typeDoc === null ? "Unknown Type" : typeId || "default");
         const intro = new EmbedBuilder()

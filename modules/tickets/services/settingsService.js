@@ -42,6 +42,13 @@ function defaultsFromEnv(env) {
       perUser: Number(env.TICKETS_MAX_ACTIVE_PER_USER || 0),
       perGuild: Number(env.TICKETS_MAX_ACTIVE_PER_GUILD || 0),
     },
+    ticketNameFormat: String(env.TICKETS_DEFAULT_NAME_FORMAT || "ticket-{userid}-{shortdate}"),
+    dmNotifications: {
+      assign: true,
+      userAdded: true,
+      userRemoved: true,
+      close: true,
+    },
   };
 }
 
@@ -75,6 +82,15 @@ export function validateSettings(input, env) {
     dmUser: typeof transcript.dmUser === "boolean" ? transcript.dmUser : d.transcript.dmUser,
   };
 
+  // Ticket naming
+  if (input.ticketNameFormat != null) {
+    if (typeof input.ticketNameFormat !== "string" || input.ticketNameFormat.length > 200) {
+      errors.push("ticketNameFormat must be a string up to 200 chars");
+    } else {
+      out.ticketNameFormat = input.ticketNameFormat;
+    }
+  }
+
   // Auto-closure
   const ac = input.autoClosure || {};
   const inactivityMs = ac.inactivityMs != null ? Number(ac.inactivityMs) : d.autoClosure.inactivityMs;
@@ -89,11 +105,20 @@ export function validateSettings(input, env) {
       : d.autoClosure.warningMessage,
   };
 
+  // DM notifications
+  const dm = input.dmNotifications || {};
+  out.dmNotifications = {
+    assign: typeof dm.assign === "boolean" ? dm.assign : d.dmNotifications.assign,
+    userAdded: typeof dm.userAdded === "boolean" ? dm.userAdded : d.dmNotifications.userAdded,
+    userRemoved: typeof dm.userRemoved === "boolean" ? dm.userRemoved : d.dmNotifications.userRemoved,
+    close: typeof dm.close === "boolean" ? dm.close : d.dmNotifications.close,
+  };
+ 
   // Reopen window
   const reopenMs = input.reopenMs != null ? Number(input.reopenMs) : d.reopenMs;
   if (!(reopenMs >= 0)) errors.push("reopenMs must be >= 0");
   out.reopenMs = reopenMs;
-
+ 
   // Limits
   const limits = input.limits || {};
   const perUser = limits.perUser != null ? Number(limits.perUser) : d.limits.perUser;
@@ -101,7 +126,7 @@ export function validateSettings(input, env) {
   if (!(perUser >= 0)) errors.push("limits.perUser must be >= 0");
   if (!(perGuild >= 0)) errors.push("limits.perGuild must be >= 0");
   out.limits = { perUser, perGuild };
-
+ 
   return { ok: errors.length === 0, errors, value: out };
 }
 
@@ -122,6 +147,19 @@ function mergeWithDefaults(doc, env) {
   copy.limits = {
     perUser: Number(doc?.limits?.perUser ?? d.limits.perUser),
     perGuild: Number(doc?.limits?.perGuild ?? d.limits.perGuild),
+  };
+
+  // Ticket naming format
+  copy.ticketNameFormat = typeof doc?.ticketNameFormat === "string" && doc.ticketNameFormat.length
+    ? doc.ticketNameFormat
+    : d.ticketNameFormat;
+
+  // DM notifications defaults
+  copy.dmNotifications = {
+    assign: typeof doc?.dmNotifications?.assign === "boolean" ? doc.dmNotifications.assign : d.dmNotifications.assign,
+    userAdded: typeof doc?.dmNotifications?.userAdded === "boolean" ? doc.dmNotifications.userAdded : d.dmNotifications.userAdded,
+    userRemoved: typeof doc?.dmNotifications?.userRemoved === "boolean" ? doc.dmNotifications.userRemoved : d.dmNotifications.userRemoved,
+    close: typeof doc?.dmNotifications?.close === "boolean" ? doc.dmNotifications.close : d.dmNotifications.close,
   };
 
   // Normalize arrays
