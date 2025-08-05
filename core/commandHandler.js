@@ -300,14 +300,21 @@ export function createCommandHandler(client, logger, config) {
       return Boolean(val);
     }
 
+    // Canonicalize contexts/integration_types:
+    // Discord may omit these when default. Treat undefined, null, and [] as equivalent.
+    const normContextsRaw = Array.isArray(contexts) ? sortPrimitive(contexts) : contexts;
+    const normIntegrationTypesRaw = Array.isArray(integration_types) ? sortPrimitive(integration_types) : integration_types;
+    const normContexts = (Array.isArray(normContextsRaw) && normContextsRaw.length === 0) ? undefined : normContextsRaw;
+    const normIntegrationTypes = (Array.isArray(normIntegrationTypesRaw) && normIntegrationTypesRaw.length === 0) ? undefined : normIntegrationTypesRaw;
+
     const norm = {
       name,
       description,
       description_localizations,
       type,
       options: normalizeOptions(options),
-      contexts: Array.isArray(contexts) ? sortPrimitive(contexts) : contexts,
-      integration_types: Array.isArray(integration_types) ? sortPrimitive(integration_types) : integration_types,
+      contexts: normContexts,
+      integration_types: normIntegrationTypes,
       nsfw: nsfw ?? false,
       default_member_permissions: canonPerm(default_member_permissions),
       dm_permission: canonBool(dm_permission, null),
@@ -338,10 +345,11 @@ export function createCommandHandler(client, logger, config) {
       const keys = new Set([...Object.keys(A || {}), ...Object.keys(B || {})]);
       for (const k of keys) {
         try {
+          // When local does not explicitly set contexts/integration_types (non-empty),
+          // normalizeForCompare omitted them. So we won't consider them for mismatch reasons either.
           const va = JSON.stringify(A?.[k]);
           const vb = JSON.stringify(B?.[k]);
           if (va !== vb) {
-            // For options, add a hint about lengths to reduce noise
             if (k === "options") {
               const la = Array.isArray(A?.options) ? A.options.length : 0;
               const lb = Array.isArray(B?.options) ? B.options.length : 0;

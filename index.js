@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import chokidar from "chokidar";
 import { createCore } from "./core/index.js";
+import { register as registerLinecount } from "./core/commands/linecount.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,6 +64,15 @@ async function main() {
 
   const core = createCore(client);
   const { logger, config, commands, interactions, events } = core;
+
+  // Register core-utility commands (e.g., /linecount) before installing commands
+  try {
+    const coreCtx = core.createModuleContext("core-utilities");
+    registerLinecount(coreCtx);
+    logger.info("Core utility commands registered");
+  } catch (err) {
+    logger.warn(`Failed to register core utility commands: ${err?.message}`);
+  }
 
   try {
     core.config.require(["DISCORD_TOKEN"]);
