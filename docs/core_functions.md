@@ -409,6 +409,9 @@ A. createInteractionCommand() and new InteractionCommandBuilder()
     - button(ctx, moduleName, localName, label, style?, extras?)
     - select(ctx, moduleName, localName, placeholder?, options?)
     - userSelect(ctx, moduleName, localName, { placeholder?, minValues?, maxValues? })
+    - roleSelect(ctx, moduleName, localName, { placeholder?, minValues?, maxValues? })
+    - channelSelect(ctx, moduleName, localName, { placeholder?, minValues?, maxValues?, channelTypes? })
+    - mentionableSelect(ctx, moduleName, localName, { placeholder?, minValues?, maxValues? })
     - modal(ctx, moduleName, localName, title)
     - textInput(customId, label, style?, required?)
 
@@ -478,6 +481,18 @@ Located in core/ui.js
 - createMultiSelectMenu(ctx, builder, moduleName, options, onSelect, { placeholder?, maxValues?, ephemeral? })
   - Returns { message, dispose }
   - Why: Simplify select menus with routing.
+- createUserSelectMenu(ctx, builder, moduleName, onSelect, { placeholder?, minValues?, maxValues?, ephemeral? })
+  - Returns { message, dispose }
+  - Why: User selection with automatic routing.
+- createRoleSelectMenu(ctx, builder, moduleName, onSelect, { placeholder?, minValues?, maxValues?, ephemeral? })
+  - Returns { message, dispose }
+  - Why: Role selection with automatic routing.
+- createChannelSelectMenu(ctx, builder, moduleName, onSelect, { placeholder?, minValues?, maxValues?, channelTypes?, ephemeral? })
+  - Returns { message, dispose }
+  - Why: Channel selection with automatic routing.
+- createMentionableSelectMenu(ctx, builder, moduleName, onSelect, { placeholder?, minValues?, maxValues?, ephemeral? })
+  - Returns { message, dispose }
+  - Why: Mentionable selection with automatic routing.
 
 - createForm(ctx, builder, moduleName, { title, fields })
   - Returns { modal, message, open, modalId }
@@ -542,6 +557,21 @@ export function setup(ctx) {
     ))
     .onButton("refresh", async (i) => {
       await i.update({ content: "Refreshed." });
+    })
+    .onSelect("choice", async (i) => {
+      await i.update({ content: `Selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onUserSelect("userpick", async (i) => {
+      await i.update({ content: `User selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onRoleSelect("rolepick", async (i) => {
+      await i.update({ content: `Role selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onChannelSelect("channelpick", async (i) => {
+      await i.update({ content: `Channel selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onMentionableSelect("mentionpick", async (i) => {
+      await i.update({ content: `Mentionable selected: ${i.values?.join(", ")}`, components: [] });
     });
 
   const off = b.register(ctx, "my-module", { stateManager: ctx.v2.state });

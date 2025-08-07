@@ -137,6 +137,18 @@ export function registerDemoCommand(ctx) {
     .onSelect("choice", async (i) => {
       await i.update({ content: `Selected: ${i.values?.join(", ")}`, components: [] });
     })
+    .onUserSelect("userpick", async (i) => {
+      await i.update({ content: `User selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onRoleSelect("rolepick", async (i) => {
+      await i.update({ content: `Role selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onChannelSelect("channelpick", async (i) => {
+      await i.update({ content: `Channel selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onMentionableSelect("mentionpick", async (i) => {
+      await i.update({ content: `Mentionable selected: ${i.values?.join(", ")}`, components: [] });
+    })
     .onAutocomplete("q", async (i) => {
       const focused = i.options.getFocused();
       const choices = ["alpha", "beta", "gamma"].filter(x => x.startsWith(focused || ""));
@@ -284,12 +296,19 @@ HTTP calls with retries and timeouts
 
 Command registration patterns
 
-- v2 builder path (recommended for slash commands):
+- v2 builder path (recommended for slash commands and select menus):
   - Build with ctx.v2.createInteractionCommand()
+  - Use builder helpers for select menus:
+    - .onSelect("choice", handler)
+    - .onUserSelect("userpick", handler)
+    - .onRoleSelect("rolepick", handler)
+    - .onChannelSelect("channelpick", handler)
+    - .onMentionableSelect("mentionpick", handler)
   - Register via ctx.v2.register(builder, moduleName)
   - Capture returned disposer and add to ctx.lifecycle
 - interactions service path (for buttons/selects with customId prefixes):
   - Use ctx.interactions.registerButton(moduleName, "prefix:", handler, { prefix: true })
+  - Use ctx.interactions.registerSelect(moduleName, "prefix:", handler, { prefix: true }) for custom select menus
   - Store disposer or add to lifecycle immediately
 
 See [modules/modlog/index.js](modules/modlog/index.js) for a complete example using a single top-level command with subcommands and autocomplete wired to separate handlers.
@@ -386,7 +405,7 @@ If available, use [bin/scaffold-module.js](bin/scaffold-module.js) to bootstrap 
 Troubleshooting tips
 
 - Component handler not firing? Ensure customId and prefix scoping match. v2 builder helpers and UI helpers scope IDs automatically by module and command.
-- Select menu parity: user select IDs may map to :sel: internally; ensure correct registration method was used.
+- Select menu parity: user, role, channel, and mentionable select IDs are mapped and scoped internally; ensure you use the correct builder helper (e.g., .onUserSelect, .onRoleSelect, etc.) or registration method for your select menu type.
 - Command changes not appearing?
   - Global installs can take up to 1 hour to propagate.
   - Use COMMANDS_DRY_RUN or set deploy strategy to "diff" for diagnostics.
