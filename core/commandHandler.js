@@ -93,7 +93,7 @@ export function createCommandHandler(client, logger, config) {
               }
             });
           } catch (err) {
-            logger.debug('[DEBUG] Failed to log interaction channel context:', err);
+            logger.warn('[DEBUG] Failed to log interaction channel context:', err);
           }
           // v2: centralized routing first
           if (interaction.isChatInputCommand?.() === true) {
