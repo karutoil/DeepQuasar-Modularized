@@ -1,76 +1,136 @@
-# Create a Module
+# Create a Module (Folder-based, wired via index.js)
 
-This guide walks through building a module for DeepQuasar: how to register commands and interactions, wire lifecycle cleanup, and safely load/unload.
+This guide explains how to structure a module as a folder with an index.js entry that wires handlers, services, and lifecycle concerns together. It replaces the previous single-file example. The pattern mirrors existing modules such as [modules/modlog/index.js](modules/modlog/index.js), [modules/music/index.js](modules/music/index.js), and [modules/autorole/index.js](modules/autorole/index.js).
 
 Prerequisites
-- You have a running Discord.js client and the core initialized with createCore(client).
-- You are familiar with the core module context APIs described in docs/core_functions.md.
+- You have a running Discord.js client and the core initialized with [createCore()](core/index.js:1).
+- You are familiar with the core module context APIs described in [docs/core_functions.md](docs/core_functions.md).
 - Node 18+ recommended.
 
 Module anatomy
 
-Each module typically exports an async setup function that receives the module-scoped context. Use ctx.v2 builders for slash commands and interactions, ctx.events/ctx.interactions for additional event hooks, and ctx.lifecycle to register disposables for cleanup.
+- Each module is a folder under modules/ and exports a default async function from index.js (the module entry point).
+- index.js wires together submodules:
+  - handlers/ for slash commands, buttons, selects, modals, and event listeners
+  - services/ for persistence, schedulers, and shared business logic
+  - utils/ for helpers (optional)
+- The entry point checks feature flags, ensures initialization (e.g., DB indexes), registers commands and interactions, sets up events and schedulers, and registers lifecycle disposables for clean unload.
 
-Example directory layout:
+Example directory layout
 modules/
   example/
     index.js
     handlers/
+      hello.js
+      demo.js
+      events.js
     services/
+      settings.js
+      jobs.js
+    utils/
+      formatters.js
+    module.env.example
     README.md
 
+Key ideas
+- index.js is thin orchestration: import handler/service factories and call them with ctx.
+- Each handler/service returns a disposer function (off/stop) or registers its own disposables via ctx.lifecycle.addDisposable.
+- Feature flags: context config can disable a module without removing code.
+- Command registration uses v2 builders or interactions service, consistent with the repository.
 
-Minimal module: a simple slash command
+Minimal folderized module
 
-modules/example/index.js
+- Goal: define /hello via a dedicated handler and wire it in index.js.
+
+modules/example/handlers/hello.js
 ```js
-export async function setup(ctx) {
-  // Create a v2 command builder
+export function registerHelloCommand(ctx) {
+  const moduleName = "example";
   const b = ctx.v2.createInteractionCommand()
     .setName("hello")
     .setDescription("Say hello")
-    .onExecute(ctx.dsl.withTryCatch(
-      ctx.dsl.withDeferredReply(async (i) => {
-        const e = ctx.embed.success({ title: "Hello", description: "World" });
-        await i.editReply({ embeds: [e] });
-      })
-    ));
+    .onExecute(
+      ctx.dsl.withTryCatch(
+        ctx.dsl.withDeferredReply(async (i) => {
+          const e = ctx.embed.success({ title: "Hello", description: "World" });
+          await i.editReply({ embeds: [e] });
+        })
+      )
+    );
 
-  // Register the builder, capture disposer
-  const { off } = b.register(ctx, "example", { stateManager: ctx.v2.state });
-  ctx.lifecycle.addDisposable(off);
+  const dispose = ctx.v2.register(b, moduleName);
+  ctx.lifecycle.addDisposable(dispose);
+  return dispose;
 }
 ```
 
-What this does
-- Defines a slash command /hello.
-- Wraps the handler with standard error handling and deferReply using the DSL.
-- Registers the command and ensures it is unregistered when your module unloads.
-
-
-Add component handlers and UI helpers
-
-You can attach buttons, selects, modals, and autocomplete in the same builder.
-
 modules/example/index.js
 ```js
-export async function setup(ctx) {
+export default async function init(ctx) {
+  const moduleName = "example";
+  const { logger, config, lifecycle } = ctx;
+
+  if (!config.isEnabled("MODULE_EXAMPLE_ENABLED", true)) {
+    logger.info("[Example] Module disabled via config.");
+    return { name: moduleName, description: "Example module (disabled)" };
+  }
+
+  // Wire handlers
+  const disposers = [];
+  try {
+    const { registerHelloCommand } = await import("./handlers/hello.js");
+    const d = registerHelloCommand(ctx);
+    if (typeof d === "function") disposers.push(d);
+  } catch (e) {
+    logger.error("[Example] Failed to register hello command", { error: e?.message });
+  }
+
+  lifecycle.addDisposable(() => {
+    for (const d of disposers) {
+      try { d?.(); } catch {}
+    }
+  });
+
+  logger.info("[Example] Module loaded.");
+  return {
+    name: moduleName,
+    description: "Minimal folderized example with a /hello command.",
+    dispose: async () => {
+      logger.info("[Example] Module unloaded.");
+      for (const d of disposers) {
+        try { d?.(); } catch {}
+      }
+    }
+  };
+}
+```
+
+Wiring multiple handlers and UI components
+
+- Each handler file should encapsulate a single command or a cohesive set of interactions, returning a disposer.
+
+modules/example/handlers/demo.js
+```js
+export function registerDemoCommand(ctx) {
+  const moduleName = "example";
+
   const b = ctx.v2.createInteractionCommand()
     .setName("demo")
     .setDescription("Demonstration")
     .addStringOption(o => o.setName("q").setDescription("Query"))
-    .onExecute(ctx.dsl.withTryCatch(
-      ctx.dsl.withDeferredReply(async (i) => {
-        // Paginated embed UI
-        const pages = [
-          { title: "Page 1", description: "..." },
-          { title: "Page 2", description: "..." },
-        ];
-        const { message, dispose } = ctx.v2.ui.createPaginatedEmbed(ctx, b, "example", pages);
-        await i.editReply(message);
-        ctx.lifecycle.addDisposable(dispose);
-      })
-    ))
+    .onExecute(
+      ctx.dsl.withTryCatch(
+        ctx.dsl.withDeferredReply(async (i) => {
+          const pages = [
+            { title: "Page 1", description: "..." },
+            { title: "Page 2", description: "..." },
+          ];
+          const { message, dispose } = ctx.v2.ui.createPaginatedEmbed(ctx, b, moduleName, pages);
+          await i.editReply(message);
+          ctx.lifecycle.addDisposable(dispose);
+        })
+      )
+    )
     .onButton("refresh", async (i) => {
       await i.update({ content: "Refreshed.", components: [] });
     })
@@ -83,189 +143,258 @@ export async function setup(ctx) {
       await i.respond(choices.map(c => ({ name: c, value: c })));
     });
 
-  const { off } = b.register(ctx, "example", { stateManager: ctx.v2.state });
-  ctx.lifecycle.addDisposable(off);
+  const dispose = ctx.v2.register(b, moduleName);
+  ctx.lifecycle.addDisposable(dispose);
+  return dispose;
 }
 ```
 
-Scoping customIds automatically
-- Any .onButton("name")/.onSelect("name")/.onModal("name") receives scoped IDs like example:demo:btn:name… so they won’t collide with other modules.
-- You can build components using builder.button/select/modal helpers if you need to pre-construct UI, or use UI helpers in core/ui.js for common patterns.
-
-
-Listening to Discord client events
-
-Use ctx.events to safely bind client events with tracked cleanup.
-
+modules/example/index.js (wiring multiple)
 ```js
-export async function setup(ctx) {
-  const offReady = ctx.events.once("example", "ready", () => {
-    ctx.logger.info("Example module ready");
-  });
-  ctx.lifecycle.addDisposable(offReady);
+export default async function init(ctx) {
+  const moduleName = "example";
+  const { logger, config, lifecycle } = ctx;
 
-  const offMsgCreate = ctx.events.on("example", "messageCreate", async (msg) => {
+  if (!config.isEnabled("MODULE_EXAMPLE_ENABLED", true)) {
+    logger.info("[Example] Module disabled via config.");
+    return { name: moduleName, description: "Example module (disabled)" };
+  }
+
+  const disposers = [];
+
+  // Register commands
+  try { const { registerHelloCommand } = await import("./handlers/hello.js"); const d = registerHelloCommand(ctx); if (typeof d === "function") disposers.push(d); } catch (e) { logger.error("[Example] hello failed", { error: e?.message }); }
+  try { const { registerDemoCommand } = await import("./handlers/demo.js"); const d = registerDemoCommand(ctx); if (typeof d === "function") disposers.push(d); } catch (e) { logger.error("[Example] demo failed", { error: e?.message }); }
+
+  lifecycle.addDisposable(() => {
+    for (const d of disposers) { try { d?.(); } catch {} }
+  });
+
+  logger.info("[Example] Module loaded.");
+  return {
+    name: moduleName,
+    description: "Example with multiple commands and UI handlers.",
+    dispose: async () => {
+      logger.info("[Example] Module unloaded.");
+      for (const d of disposers) { try { d?.(); } catch {} }
+    }
+  };
+}
+```
+
+Client events with tracked cleanup
+
+- Use a dedicated handler file to attach events via ctx.events and return a disposer.
+
+modules/example/handlers/events.js
+```js
+export function registerClientEvents(ctx) {
+  const moduleName = "example";
+
+  const offReady = ctx.events.once(moduleName, "ready", () => {
+    ctx.logger.info("[Example] Ready");
+  });
+
+  const offMsgCreate = ctx.events.on(moduleName, "messageCreate", async (msg) => {
     if (msg.content === "!ping") await msg.reply("Pong");
   });
-  ctx.lifecycle.addDisposable(offMsgCreate);
+
+  // Aggregate disposer
+  const dispose = () => {
+    try { offReady?.(); } catch {}
+    try { offMsgCreate?.(); } catch {}
+  };
+
+  ctx.lifecycle.addDisposable(dispose);
+  return dispose;
 }
 ```
 
+Background jobs and services
 
-Background jobs with the Scheduler
+- Put recurring tasks, DB access, and shared logic in services/.
 
-Use cron-like tasks via ctx.scheduler.
-
+modules/example/services/jobs.js
 ```js
-export async function setup(ctx) {
+export function startFiveMinuteJob(ctx) {
   const stop = ctx.scheduler.schedule("*/5 * * * *", async () => {
-    ctx.logger.info("5-minute job ran");
+    ctx.logger.info("[Example] 5-minute job ran");
   }, { immediate: true });
+
   ctx.lifecycle.addDisposable(stop);
+  return stop;
 }
 ```
 
-
-Permissions, rate limits, and preconditions
-
-Use DSL wrappers for consistent policies.
-
+modules/example/services/settings.js
 ```js
-export async function setup(ctx) {
-  const b = ctx.v2.createInteractionCommand()
-    .setName("admin")
-    .setDescription("Admin command")
-    .addPrecondition(async (i) => {
-      // Gate by permission
-      const ok = await ctx.permissions.ensureInteractionPerms(i, { userPerms: ["ManageGuild"] });
-      return ok || "You do not have permission for this command.";
-    })
-    .onExecute(
-      ctx.dsl.withCooldown(
-        ctx.dsl.withTryCatch(async (i) => {
-          await i.reply({ content: "Admin task executed.", ephemeral: true });
-        }),
-        { keyFn: (i) => `admin:${i.user?.id}`, capacity: 1, refillPerSec: 0.2 }
-      )
-    );
-
-  const { off } = b.register(ctx, "example", { stateManager: ctx.v2.state });
-  ctx.lifecycle.addDisposable(off);
+export async function ensureIndexes(ctx) {
+  // Example: setup collection indexes
+  const db = await ctx.mongo.getDb();
+  await db.collection("example_settings").createIndex({ guildId: 1 }, { unique: true });
 }
 ```
 
+modules/example/index.js (wiring services and events)
+```js
+export default async function init(ctx) {
+  const moduleName = "example";
+  const { logger, config, lifecycle } = ctx;
+
+  if (!config.isEnabled("MODULE_EXAMPLE_ENABLED", true)) {
+    logger.info("[Example] Module disabled via config.");
+    return { name: moduleName, description: "Example module (disabled)" };
+  }
+
+  const disposers = [];
+
+  // Ensure DB indexes
+  try { const { ensureIndexes } = await import("./services/settings.js"); await ensureIndexes(ctx); } catch (e) { logger.warn("[Example] ensureIndexes failed", { error: e?.message }); }
+
+  // Register commands
+  try { const { registerHelloCommand } = await import("./handlers/hello.js"); const d = registerHelloCommand(ctx); if (typeof d === "function") disposers.push(d); } catch (e) { logger.error("[Example] hello failed", { error: e?.message }); }
+
+  // Register events
+  try { const { registerClientEvents } = await import("./handlers/events.js"); const d = registerClientEvents(ctx); if (typeof d === "function") disposers.push(d); } catch (e) { logger.error("[Example] events failed", { error: e?.message }); }
+
+  // Start scheduler jobs
+  try { const { startFiveMinuteJob } = await import("./services/jobs.js"); const stop = startFiveMinuteJob(ctx); if (typeof stop === "function") disposers.push(stop); } catch (e) { logger.error("[Example] jobs failed", { error: e?.message }); }
+
+  lifecycle.addDisposable(() => { for (const d of disposers) { try { d?.(); } catch {} } });
+
+  logger.info("[Example] Module loaded.");
+  return {
+    name: moduleName,
+    description: "Example module with services, events, and scheduled jobs.",
+    dispose: async () => {
+      logger.info("[Example] Module unloaded.");
+      for (const d of disposers) { try { d?.(); } catch {} }
+    }
+  };
+}
+```
+
+Permissions, rates, preconditions
+
+- Apply DSL wrappers and permission checks inside each handler file for separation of concerns, similar to the single-file examples, but isolated per handler.
 
 HTTP calls with retries and timeouts
 
-```js
-export async function setup(ctx) {
-  const b = ctx.v2.createInteractionCommand()
-    .setName("fetch")
-    .setDescription("Fetch data")
-    .onExecute(ctx.dsl.withTryCatch(async (i) => {
-      const res = await ctx.http.get("https://api.github.com/repos/nodejs/node");
-      if (!res.ok) {
-        await i.reply({ content: "Failed to fetch", ephemeral: true });
-        return;
-      }
-      await i.reply({ content: `Stars: ${res.data?.stargazers_count}`, ephemeral: true });
-    }));
+- Use ctx.http inside handlers/services; ensure error handling is local to the file to keep index.js focused on wiring.
 
-  const { off } = b.register(ctx, "example", { stateManager: ctx.v2.state });
-  ctx.lifecycle.addDisposable(off);
-}
-```
+Command registration patterns
 
+- v2 builder path (recommended for slash commands):
+  - Build with ctx.v2.createInteractionCommand()
+  - Register via ctx.v2.register(builder, moduleName)
+  - Capture returned disposer and add to ctx.lifecycle
+- interactions service path (for buttons/selects with customId prefixes):
+  - Use ctx.interactions.registerButton(moduleName, "prefix:", handler, { prefix: true })
+  - Store disposer or add to lifecycle immediately
 
-Registering and installing commands
+See [modules/modlog/index.js](modules/modlog/index.js) for a complete example using a single top-level command with subcommands and autocomplete wired to separate handlers.
 
-Register slash commands by calling builder.register(ctx, "moduleName", ...). Commands are staged in the registry. To deploy them to Discord:
-- Guild install: ctx.commands.installGuild(guildId)
-- Global install: ctx.commands.installGlobal()
+Deploying commands to Discord
 
-Configuration (via env, see core/config.js)
-- COMMAND_DEPLOY_STRATEGY: bulk | diff | auto (default bulk)
-- COMMANDS_DRY_RUN: true/false
+- Commands register into a registry; deploy at startup or when modules load:
+  - Guild install: ctx.commands.installGuild(guildId)
+  - Global install: ctx.commands.installGlobal()
+- Configuration (via env, see [core/config.js](core/config.js)):
+  - COMMAND_DEPLOY_STRATEGY: bulk | diff | auto (default bulk)
+  - COMMANDS_DRY_RUN: true/false
 
-Example deploy flow at startup (index.js)
+Example startup integration (root index.js)
 ```js
 import { Client, GatewayIntentBits } from "discord.js";
 import { createCore } from "./core/index.js";
-import * as Example from "./modules/example/index.js";
+import Example from "./modules/example/index.js";
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+});
 const core = createCore(client);
 
 client.once("ready", async () => {
-  const ctx = core.createModuleContext("example");
-  await Example.setup(ctx);
+  const ctx = core; // Repository modules accept the core context directly
+  await Example(ctx);
 
-  // Install commands after registration
+  // Deploy commands
   const guildId = process.env.GUILD_ID;
   if (guildId) await ctx.commands.installGuild(guildId);
   else await ctx.commands.installGlobal();
 
-  ctx.logger.info("Example module installed");
+  ctx.logger.info("[Startup] Example module installed");
 });
 
 client.login(process.env.DISCORD_TOKEN);
 ```
 
-
 Loading and unloading modules
 
-Loading
-- Create the module context via core.createModuleContext("moduleName").
-- Run your module’s setup(ctx) which registers commands, interactions, events.
-- Track any cleanup disposables using ctx.lifecycle.addDisposable(...).
-
-Unloading (hot-reload or shutdown)
-- Call ctx.v2.builders.clearModule("moduleName") if you manage builders manually; most builder registrations give you an off() to unregister routers and handlers.
-- Remove event listeners with the disposer you saved, or call ctx.events.removeModule("moduleName") if you attached via ctx.events.
-- For interactions registered directly via ctx.interactions, keep the off() returned and call it, or if you grouped them by module, ctx.interactions.removeModule("moduleName").
-- Clear scheduler jobs by keeping the stop() function or, for module-wide cleanup, ensure you added the stop() to ctx.lifecycle so disposeAll() can clear it.
+- Loading
+  - Create or use the core context (many modules in this repo accept core context directly).
+  - Call the module’s default export; it registers commands, interactions, events.
+  - Add disposers to ctx.lifecycle to ensure clean unloads.
+- Unloading (hot-reload or shutdown)
+  - Call the returned dispose function from the module or use ctx.lifecycle.disposeAll().
+  - If you used ctx.interactions with module scoping, you can call ctx.interactions.removeModule("moduleName") for safety.
+  - v2.register returns a disposer; store it or register in lifecycle immediately.
 
 Common pattern
 ```js
-export async function setup(ctx) {
-  // Register a command
-  const b = ctx.v2.createInteractionCommand().setName("x").setDescription("X");
-  const { off } = b.register(ctx, "my-module", { stateManager: ctx.v2.state });
-  ctx.lifecycle.addDisposable(off);
+export default async function init(ctx) {
+  const moduleName = "my-module";
+  const { lifecycle, logger } = ctx;
+
+  const disposers = [];
+
+  // Commands
+  // const disposeCmd = ctx.v2.register(builder, moduleName);
+  // disposers.push(disposeCmd);
 
   // Events
-  const offEv = ctx.events.on("my-module", "guildCreate", (g) => ctx.logger.info(`Joined guild ${g.id}`));
-  ctx.lifecycle.addDisposable(offEv);
+  // const disposeEvt = ctx.events.on(moduleName, "guildCreate", (g) => logger.info(`Joined guild ${g.id}`));
+  // disposers.push(disposeEvt);
 
   // Schedule
-  const stopJob = ctx.scheduler.schedule("0 * * * *", async () => { /* hourly */ });
-  ctx.lifecycle.addDisposable(stopJob);
+  // const stopJob = ctx.scheduler.schedule("0 * * * *", async () => { /* hourly */ });
+  // disposers.push(stopJob);
 
-  // On hot-reload or shutdown:
-  // await ctx.lifecycle.disposeAll(); // remove all disposables you registered above
+  lifecycle.addDisposable(() => {
+    for (const d of disposers) { try { d?.(); } catch {} }
+  });
+
+  return {
+    name: moduleName,
+    description: "My module.",
+    dispose: async () => {
+      for (const d of disposers) { try { d?.(); } catch {} }
+    }
+  };
 }
 ```
 
-Note on module-scoped translation
+Scaffolding a new folder-based module
 
-Use ctx.t(key, params, opts) to translate messages with module-aware fallback. For example, ctx.t("greeting", { name: i.user.username }, { guildId: i.guildId, userLocale: i.locale }).
+If available, use [bin/scaffold-module.js](bin/scaffold-module.js) to bootstrap a module folder with index.js, handlers/, and services/. Otherwise:
 
-
+- Create modules/your-module/index.js and export a default async function that wires handlers/services.
+- Place commands in modules/your-module/handlers/*.js exporting registerXxx(ctx) functions that call ctx.v2.register or ctx.interactions.registerX.
+- Place persistence, schedulers, and shared logic in modules/your-module/services/*.js exporting ensureIndexes/startXxx(ctx).
+- In your app startup, import the module and call it with the core context.
 
 Troubleshooting tips
 
-- If a component handler is not firing, verify customId matches your registered prefix or exact id. When using v2 builder helpers or UI helpers, IDs are scoped and consistent.
-- For user select menus, the core remaps :usel: to :sel: for handler parity; ensure you registered the select handler.
-- If command changes are not appearing:
-  - For global installs, Discord propagation can take up to 1 hour.
-  - Use COMMANDS_DRY_RUN or switch strategy to "diff" for diagnostics.
-- Always return and add off()/stop() disposers to ctx.lifecycle to ensure clean unloads.
+- Component handler not firing? Ensure customId and prefix scoping match. v2 builder helpers and UI helpers scope IDs automatically by module and command.
+- Select menu parity: user select IDs may map to :sel: internally; ensure correct registration method was used.
+- Command changes not appearing?
+  - Global installs can take up to 1 hour to propagate.
+  - Use COMMANDS_DRY_RUN or set deploy strategy to "diff" for diagnostics.
+- Always add disposers (off/stop) to ctx.lifecycle to guarantee clean unloads.
 
+References in this repository
 
-
-Scaffolding new modules
-
-You can use bin/scaffold-module.js if available in your repo to bootstrap a new module folder and files. Otherwise:
-- Create modules/your-module/index.js
-- Export async setup(ctx) {}
-- Register at startup using core.createModuleContext("your-module") and your setup function.
+- Folder-wired, single-command with subcommands and autocomplete: [modules/modlog/index.js](modules/modlog/index.js)
+- Folder-wired, multiple commands and events with services: [modules/music/index.js](modules/music/index.js)
+- Folder-wired, DB indexes, events, and timers: [modules/autorole/index.js](modules/autorole/index.js)
+- Complex module with many handlers and services: [modules/tickets/index.js](modules/tickets/index.js)
