@@ -478,7 +478,7 @@ export default async function init(ctx) {
   lifecycle.addDisposable(registrar.register(cmdSchedule));
   lifecycle.addDisposable(registrar.register(cmdMongo));
 
-  baseLogger.info("kitchen-sink module loaded.");
+  //baseLogger.info("kitchen-sink module loaded.");
 
   // Optional: postReady action to install commands to a specific guild via flag
   async function postReady() {

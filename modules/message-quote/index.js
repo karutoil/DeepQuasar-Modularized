@@ -33,7 +33,7 @@ export default async function init(ctx) {
     }
   });
 
-  logger.info("[MessageQuote] Module loaded.");
+  //logger.info("[MessageQuote] Module loaded.");
   return {
     name: moduleName,
     description: "Converts valid in-guild message links into rich embeds with a jump button.",

@@ -196,7 +196,7 @@ export default async function init(ctx) {
   const disposeCmd = v2.register(cleanupCmd, moduleName);
   lifecycle.addDisposable(disposeCmd);
 
-  logger.info("Cleanup module loaded.");
+  //logger.info("Cleanup module loaded.");
 
   return {
     name: moduleName,

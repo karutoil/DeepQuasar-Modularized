@@ -42,7 +42,7 @@ export default async function init(ctx) {
     } catch {}
   });
 
-  logger.info("[Autorole] Module loaded.");
+  //logger.info("[Autorole] Module loaded.");
   return {
     name: moduleName,
     description: "Automatically assign a configured role to new members with optional delay and account age gating.",

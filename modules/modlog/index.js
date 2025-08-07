@@ -151,7 +151,7 @@ export default async function init(ctx) {
   const disposeCmd = v2.register(cmdModlog, moduleName);
   lifecycle.addDisposable(disposeCmd);
 
-  logger.info("[ModLog] Module loaded (v2).");
+  //logger.info("[ModLog] Module loaded (v2).");
   return {
     name: moduleName,
     description: "Audit Log search and export utilities (v2 wired)",

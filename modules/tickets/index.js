@@ -52,7 +52,7 @@ export default async function init(ctx) {
     try { interactions?.removeModule?.(moduleName); } catch {}
   });
 
-  logger.info("[Tickets] Module loaded.");
+  //logger.info("[Tickets] Module loaded.");
   return {
     name: moduleName,
     description: "Embed-first ticketing system with per-guild settings and MongoDB persistence.",

@@ -28,7 +28,7 @@ export default async function init(ctx) {
   // Register events
   registerMusicEvents(ctx, moonlink, queueManager);
 
-  logger.info("Music module loaded.");
+  //logger.info("Music module loaded.");
   return {
     name: moduleName,
     description: "Music playback and queue management using Moonlink.js Manager.",
