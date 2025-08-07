@@ -135,8 +135,15 @@ export function createInteractions(client, logger) {
           values: interaction.values,
           type: interaction.type
         });
-        const id = interaction.customId;
-        const h = findByExactOrPrefix(id, selectsByModule, selectPrefixesByModule);
+        let id = interaction.customId;
+        // Remap our builder "usel" ids to the same handler registered for "sel" when an exact match is not found.
+        let h = findByExactOrPrefix(id, selectsByModule, selectPrefixesByModule);
+        if (!h && id.includes(":usel:")) {
+          const remap = id.replace(":usel:", ":sel:");
+          if (remap !== id) {
+            h = findByExactOrPrefix(remap, selectsByModule, selectPrefixesByModule);
+          }
+        }
         logger.debug("[Core] About to call handler for select menu", { customId: interaction.customId, handlerExists: !!h });
         if (h) return await h(interaction);
         return;

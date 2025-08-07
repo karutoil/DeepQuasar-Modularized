@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 
 /**
  * v2 Interaction Command Builder
@@ -134,12 +134,22 @@ constructor() {
       disposers.push(off);
     }
     for (const [local, handler] of this._selects.entries()) {
+      // Register for StringSelect menus
       const id = this._makeId(moduleName, "sel", local);
       const off = ctx.interactions.registerSelect(moduleName, id, async (interaction) => {
         const state = stateManager ? stateManager.forInteraction(interaction) : null;
         await handler(interaction, state);
       });
       disposers.push(off);
+
+      // Additionally register a User Select handler for the same local name so that
+      // customIds built with "usel" are routed to the same handler.
+      const userId = this._makeId(moduleName, "usel", local);
+      const offUser = ctx.interactions.registerSelect(moduleName, userId, async (interaction) => {
+        const state = stateManager ? stateManager.forInteraction(interaction) : null;
+        await handler(interaction, state);
+      });
+      disposers.push(offUser);
     }
     for (const [local, handler] of this._modals.entries()) {
       const id = this._makeId(moduleName, "modal", local);
@@ -190,6 +200,20 @@ constructor() {
     if (Array.isArray(options) && options.length) {
       menu.addOptions(...options.map((o) => ({ label: o.label ?? String(o.value), value: String(o.value) })));
     }
+    return menu;
+  }
+
+  /**
+   * Build a Discord User Select Menu (type=USER) with scoped customId.
+   * minValues defaults to 1, maxValues defaults to 1 (override as needed).
+   */
+  userSelect(ctx, moduleName, localName, { placeholder = "Select users...", minValues = 1, maxValues = 1 } = {}) {
+    const id = this._makeId(moduleName, "usel", localName);
+    const menu = new UserSelectMenuBuilder()
+      .setCustomId(id)
+      .setPlaceholder(placeholder)
+      .setMinValues(Math.max(0, Math.min(minValues, 25)))
+      .setMaxValues(Math.max(1, Math.min(maxValues, 25)));
     return menu;
   }
 

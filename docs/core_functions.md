@@ -1,1408 +1,559 @@
+# Core functions available to modules
 
-# DeepQuasar Core Functions
+This document inventories every function and builder surface exposed to modules by the core. For each, you will find:
+- What it is
+- How to use it
+- Why/when to use it
+- Example usage snippets
 
-This document provides a detailed overview of the functions available in the DeepQuasar core. These functions are designed to be used within modules to extend the functionality of the bot.
+Modules receive these via the module context created with core.createModuleContext(moduleName). Many factories are already constructed and injected into the context (client, logger, config, bus, commands, interactions, events, embed, rateLimiter, permissions, http, ids, metrics, scheduler, mongo, dsl, lifecycle, utils, t, i18n, guildConfig, errorReporter, and v2 features).
 
-## Builders (`core/builders.js`)
+Navigation
+- Core creation and module context: createCore(), createModuleContext()
+- Logging: createLogger(), childLogger()
+- Config: createConfig()
+- Event bus: createBus()
+- Command handling: createCommandHandler()
+- Interactions registry: createInteractions()
+- Events registry: createEvents()
+- Embeds: createEmbed()
+- Permissions: createPermissions()
+- Rate limiter: createRateLimiter()
+- HTTP client: createHttp()
+- IDs: createIds()
+- DSL wrappers: createDsl()
+- Scheduler: createScheduler()
+- Metrics: createMetrics()
+- Mongo access: createMongo() [factory exists; usage depends on file, not documented here]
+- i18n: createI18n()
+- Guild config: createGuildConfig()
+- Error reporting: createErrorReporter()
+- v2 Builders and UI:
+  - createInteractionCommand(), new InteractionCommandBuilder()
+  - createBuilderRegistry()
+  - ui.createPaginatedEmbed(), ui.createConfirmationDialog(), ui.createMultiSelectMenu(), createForm(), parseModal(), createWizard()
+- State manager: createStateManager()
 
-The `builders.js` file provides a powerful `InteractionCommandBuilder` for creating and managing slash commands and their interactions.
+Note: Snippets assume you are inside a module’s setup function receiving ctx = core.createModuleContext("your-module").
 
-### `createInteractionCommand()`
 
-Creates a new `InteractionCommandBuilder` instance.
 
-**Example:**
+Core lifecycle and utilities from createCore() and createModuleContext()
 
-```javascript
-import { createInteractionCommand } from "./core/builders.js";
+1) core.createCore(client, baseLoggerLevel?)
+- What: Constructs the entire core service suite and returns an object with all services and a createModuleContext(moduleName) helper.
+- How: Call once at bot startup with a Discord.js client.
+- Why: Establishes shared infra (logging, config, registries, schedulers, i18n, etc.).
+- Example:
+  const core = createCore(client);
+  const ctx = core.createModuleContext("example");
 
-const myCommand = createInteractionCommand();
-```
+2) ctx = core.createModuleContext(moduleName)
+- What: Produces a module-scoped context including:
+  client, logger (module child), config, bus, commands, interactions, events, embed, rateLimiter, permissions, http, ids, metrics, scheduler, mongo, dsl, lifecycle, utils, t, i18n, guildConfig, errorReporter, v2 (state, builders, createInteractionCommand, InteractionCommandBuilder, ui).
+- How: Use the returned ctx for all module registrations.
+- Why: Ensures isolation, cleanup, and consistent logging.
 
-### `InteractionCommandBuilder`
+3) ctx.lifecycle helpers
+Source: createLifecycle() in core/index.js:27
+- addDisposable(fn)
+  - What: Track a cleanup function for module hot-reload/unload.
+  - How: const off = something(); ctx.lifecycle.addDisposable(off);
+  - Why: Ensures proper cleanup.
+- addListener(emitter, event, handler)
+  - What: Attach event listener and auto-track removal.
+  - Example: const off = ctx.lifecycle.addListener(client, "ready", () => {});
+- setInterval(fn, ms) and setTimeout(fn, ms)
+  - What: Tracked timers that automatically clear on disposeAll().
+- disposeAll()
+  - What: Calls all tracked disposables.
 
-A builder for creating slash commands and their associated interactions.
+4) ctx.utils
+Source: createUtils() in core/index.js:80
+- now()
+  - What: ISO timestamp string.
+- safeAsync(fn, onError?)
+  - What: Run async fn catching/logging errors; optional onError(err).
+  - Why: Prevents unhandled exceptions in background tasks.
 
-#### `setName(name)`
+5) ctx.t(key, params?, opts?)
+- What: Module-scoped translator using i18n with module fallback.
+- How: const text = ctx.t("my.key", { name: user.username }, { guildId, userLocale });
+- Why: Localized messages consistently across modules.
 
-Sets the name of the command.
 
-**Example:**
 
-```javascript
-myCommand.setName("ping");
-```
+Config
 
-#### `setDescription(description)`
+createConfig() -> Config in core/config.js:52
+- ctx.config.get(key, fallback?)
+  - What: Get environment value.
+- ctx.config.getBool(key, fallback?)
+  - What: Get boolean env using common true/false strings.
+- ctx.config.require([keys])
+  - What: Throw if any required environment variables are missing.
+- ctx.config.isEnabled(flagName, defaultVal?)
+  - What: Feature flag helper resolving to boolean.
 
-Sets the description of the command.
+Why: Standardize env access and validation across modules.
 
-**Example:**
+Example:
+const apiUrl = ctx.config.get("MY_API_URL");
+if (!ctx.config.isEnabled("MY_FEATURE")) return;
 
-```javascript
-myCommand.setDescription("Replies with pong!");
-```
 
-#### `addOption(fn)`
 
-Adds an option to the command.
+Logging
 
-**Example:**
+createLogger(level?), childLogger(parent, moduleName) in core/logger.js
+- ctx.logger (child) is already provided by createModuleContext().
+- logger methods: info, warn, error, debug, etc.
+- childLogger(parent, moduleName): attach module metadata when you need nested loggers.
 
-```javascript
-myCommand.addStringOption(option =>
-    option.setName("message")
-        .setDescription("The message to echo back")
-        .setRequired(true)
+Why: Consistent, structured logging.
+
+Example:
+ctx.logger.info("Starting module");
+const apiLog = childLogger(ctx.logger, "api");
+apiLog.debug("fetching", { url });
+
+
+
+Event Bus
+
+createBus(logger) in core/bus.js
+- ctx.bus.publish(event, payload)
+- ctx.bus.subscribe(event, handler) -> off()
+- ctx.bus.once(event, handler) -> off()
+
+Why: Decouple internal module events, broadcast domain signals.
+
+Example:
+const off = ctx.bus.subscribe("tickets:new", async (ticket) => { /* ... */ });
+ctx.lifecycle.addDisposable(off);
+ctx.bus.publish("tickets:new", { id: 123 });
+
+
+
+Discord Event Registry
+
+createEvents(client, logger) in core/events.js
+- ctx.events.on(moduleName, event, handler) -> off()
+- ctx.events.once(moduleName, event, handler) -> off()
+- ctx.events.off(moduleName, event, handler)
+- ctx.events.addListener(moduleName, emitter, event, handler, { once? })
+- ctx.events.removeModule(moduleName)
+
+Why: Attach Discord client or custom emitter events with cleanup.
+
+Example:
+const offReady = ctx.events.once("my-module", "ready", () => ctx.logger.info("Ready!"));
+ctx.lifecycle.addDisposable(offReady);
+
+
+
+Command Handler
+
+createCommandHandler(client, logger, config) in core/commandHandler.js
+- ctx.commands.registerSlash(moduleName, ...slashJsonOrBuilders)
+  - Register slash and context commands (JSON or SlashCommandBuilder JSON).
+- ctx.commands.onInteractionCreate(moduleName, handler) -> off()
+  - Listen for chat input and context menu interactions (legacy compat; v2 routers also active).
+- ctx.commands.installGuild(guildId)
+- ctx.commands.installGlobal()
+- ctx.commands.removeModule(moduleName)
+- ctx.commands.getRegistrySnapshot()
+- v2 centralized routing (used by InteractionCommandBuilder internally)
+  - v2RegisterExecute(commandName, fn) -> off()
+  - v2RegisterAutocomplete(commandName, optionName, fn) -> off()
+
+Why: Install and route slash/ctx commands reliably, with diff/bulk strategies and dry-run.
+
+Example (manual JSON):
+ctx.commands.registerSlash("my-module", { name: "ping", description: "Ping" });
+const off = ctx.commands.onInteractionCreate("my-module", async (i) => {
+  if (i.isChatInputCommand?.() && i.commandName === "ping") {
+    await i.reply("Pong");
+  }
+});
+ctx.lifecycle.addDisposable(off);
+
+
+
+Interactions Registry
+
+createInteractions(client, logger) in core/interactions.js
+- Register handlers:
+  - ctx.interactions.registerButton(moduleName, customId, handler, { prefix? }) -> off()
+  - ctx.interactions.registerSelect(moduleName, customId, handler, { prefix? }) -> off()
+  - ctx.interactions.registerModal(moduleName, customId, handler, { prefix? }) -> off()
+  - ctx.interactions.registerUserContext(moduleName, commandName, handler) -> off()
+  - ctx.interactions.registerMessageContext(moduleName, commandName, handler) -> off()
+- ctx.interactions.removeModule(moduleName)
+
+Why: Centralized routing of components and context menus, with optional prefix matching for dynamic customIds.
+
+Example:
+const off = ctx.interactions.registerButton("my-module", "my-module:btn:save", async (i) => {
+  await i.update({ content: "Saved", components: [] });
+});
+ctx.lifecycle.addDisposable(off);
+
+
+
+Embeds
+
+createEmbed(config) in core/embed.js
+- ctx.embed.base(color, opts)
+- ctx.embed.success(opts)
+- ctx.embed.error(opts)
+- ctx.embed.info(opts)
+- ctx.embed.warn(opts)
+- ctx.embed.neutral(opts)
+
+Opts: { title, description, url, thumbnail, image, author, fields, footerText, footerIcon }
+
+Why: Consistent theming and ergonomics for embeds.
+
+Example:
+const e = ctx.embed.success({ title: "Done", description: "Operation successful." });
+await interaction.reply({ embeds: [e], ephemeral: true });
+
+
+
+Permissions
+
+createPermissions(embed, logger) in core/permissions.js
+- ctx.permissions.hasUserPerms(member, perms)
+- ctx.permissions.hasBotPerms(guild, perms)
+- ctx.permissions.ensureInteractionPerms(interaction, { userPerms, botPerms }) -> Promise<boolean>
+
+Why: Gate handlers on required permissions and auto-inform users/bot insufficiency.
+
+Example:
+const ok = await ctx.permissions.ensureInteractionPerms(i, { userPerms: ["ManageGuild"] });
+if (!ok) return;
+// proceed
+
+
+
+Rate Limiter
+
+createRateLimiter(logger) is constructed in core/index.js and used by DSL. Typical module usage is via DSL withCooldown; direct usage follows its own API from core/rateLimiter.js (not shown here). Prefer DSL withCooldown unless you need low-level control.
+
+
+
+HTTP Client
+
+createHttp(config, logger) in core/http.js
+- ctx.http.request(method, url, opts)
+- ctx.http.get(url, opts)
+- ctx.http.post(url, data, opts)
+- ctx.http.patch(url, data, opts)
+- ctx.http.delete(url, opts)
+
+Opts: { headers, body, timeoutMs, retries }. Returns { ok, status, data, headers }.
+
+Why: Typed JSON convenience with retries, timeouts, and logging.
+
+Example:
+const res = await ctx.http.get("https://api.example.com/items");
+if (!res.ok) return;
+await interaction.reply(`Items: ${JSON.stringify(res.data)}`);
+
+
+
+IDs
+
+createIds() in core/ids.js
+- ctx.ids.make(moduleName, type, name, extras?) -> customId string
+- ctx.ids.parse(customId) -> { module, type, name, extras }
+
+Why: Consistent customId shape for interactions and debugging.
+
+Example:
+const id = ctx.ids.make("my-module", "btn", "save", { page: 2 });
+// later:
+const parsed = ctx.ids.parse(id); // { module: "my-module", type: "btn", name: "save", extras: { page: "2" } }
+
+
+
+DSL Wrappers
+
+createDsl({ logger, embed, rateLimiter, permissions, errorReporter, i18n }) in core/dsl.js
+- withTryCatch(handler, { errorMessage? })
+  - Wraps handler in try/catch, logs and replies with a standard error embed.
+- withDeferredReply(handler, { ephemeral? = true })
+  - Ensures deferReply before running your handler.
+- withCooldown(handler, { keyFn, capacity = 1, refillPerSec = 1, message? })
+  - Token-bucket rate limit by interaction/user key.
+- withPerms(handler, { userPerms = [], botPerms = [] })
+  - Verifies permissions before executing.
+- withConfirmation(prompt, handler, { confirmLabel?, cancelLabel?, ephemeral? = true })
+  - Presents Confirm/Cancel components; invokes handler on confirm.
+- withPreconditions(handler, ...preconditions)
+  - Each precondition async (interaction) => boolean|string. Returns if blocked; otherwise runs handler.
+
+Why: Compose consistent policies with minimal boilerplate.
+
+Examples:
+const handler = ctx.dsl.withTryCatch(
+  ctx.dsl.withDeferredReply(async (i) => {
+    await i.editReply("Work done");
+  })
 );
-```
 
-#### `onExecute(handler)`
+const guarded = ctx.dsl.withPerms(async (i) => { /* ... */ }, { userPerms: ["ManageGuild"] });
 
-Sets the handler for when the command is executed.
 
-**Example:**
 
-```javascript
-myCommand.onExecute((interaction, args, state) => {
-    interaction.reply("Pong!");
-});
-```
+Scheduler
 
-#### `onButton(localName, handler)`
+createScheduler(logger) in core/scheduler.js
+- ctx.scheduler.schedule(cronExpr, fn, { timezone?, immediate? }) -> stop()
+- ctx.scheduler.stopAll()
+- ctx.scheduler.list() -> number active jobs
 
-Sets a handler for a button interaction.
+Why: Cron-like recurring jobs with logging and tracked cleanup.
 
-**Example:**
+Example:
+const stop = ctx.scheduler.schedule("*/5 * * * *", async () => {
+  ctx.logger.info("5-minute task running");
+}, { immediate: true });
+ctx.lifecycle.addDisposable(stop);
 
-```javascript
-myCommand.onButton("my_button", (interaction, state) => {
-    interaction.reply("Button clicked!");
-});
-```
 
-#### `onSelect(localName, handler)`
 
-Sets a handler for a select menu interaction.
+Metrics
 
-**Example:**
+createMetrics(logger) in core/metrics.js
+- ctx.metrics.counter(name) -> { inc(n?), get(), reset() }
+- ctx.metrics.gauge(name) -> { set(v), add(n?), sub(n?), get(), reset() }
+- ctx.metrics.timer(name) -> { start(), stop(log?), withTiming(asyncFn, { logResult? }) }
 
-```javascript
-myCommand.onSelect("my_select", (interaction, state) => {
-    interaction.reply(`You selected: ${interaction.values.join(", ")}`);
-});
-```
+Why: Lightweight instrumentation without external dependencies.
 
-#### `onModal(localName, handler)`
+Example:
+const t = ctx.metrics.timer("heavyTask");
+t.start();
+await doWork();
+const ms = t.stop(true);
 
-Sets a handler for a modal submission.
 
-**Example:**
 
-```javascript
-myCommand.onModal("my_modal", (interaction, state) => {
-    const favoriteColor = interaction.fields.getTextInputValue("favoriteColorInput");
-    interaction.reply(`Your favorite color is ${favoriteColor}`);
-});
-```
+Guild Config
 
-#### `onAutocomplete(optionName, handler)`
+createGuildConfig({ mongo, logger, config }) in core/guildConfig.js
+- ctx.guildConfig.setLocale(guildId, locale)
+- ctx.guildConfig.getLocale(guildId)
+- ctx.guildConfig.set(guildId, key, value)
+- ctx.guildConfig.get(guildId, key, fallback?)
 
-Sets a handler for autocomplete interactions.
+Why: Store per-guild settings and locale preferences without full persistence layer.
 
-**Example:**
+Example:
+ctx.guildConfig.setLocale(i.guildId, "en-US");
+const theme = ctx.guildConfig.get(i.guildId, "theme", "default");
 
-```javascript
-myCommand.onAutocomplete("query", (interaction) => {
-    const focusedValue = interaction.options.getFocused();
-    const choices = ["apple", "banana", "cherry", "date", "elderberry"];
-    const filtered = choices.filter(choice => choice.startsWith(focusedValue));
-    interaction.respond(
-        filtered.map(choice => ({ name: choice, value: choice }))
-    );
-});
-```
 
-#### `addPrecondition(fn)`
 
-Adds a precondition that must be met before the command can be executed.
+Internationalization
 
-**Example:**
+createI18n({ config, logger }) is constructed in core/index.js and exposed via ctx.i18n and the convenience ctx.t(key, params, opts).
+- Use ctx.t() as your primary access.
+- If needed, ctx.i18n.resolveLocale and ctx.i18n.t may be available based on the i18n implementation (not shown here).
 
-```javascript
-myCommand.addPrecondition((interaction) => {
-    if (interaction.user.id !== "1234567890") {
-        return "You are not authorized to use this command.";
-    }
-    return true;
-});
-```
 
-#### `register(ctx, moduleName, { stateManager } = {})`
 
-Registers the command with the core.
+Error Reporting
 
-**Example:**
+createErrorReporter({ config, logger }) in core/reporting.js
+- ctx.errorReporter.report(error, context?)
+  - Logs locally and optionally forwards to Sentry if configured via env (SENTRY_DSN, etc.)
 
-```javascript
-myCommand.register(ctx, "my-module");
-```
+Why: Centralized error capture with contextual metadata.
 
-## Bus (`core/bus.js`)
-
-The `bus.js` file provides a simple event bus for communication between modules.
-
-### `createBus(baseLogger)`
-
-Creates a new event bus instance.
-
-**Example:**
-
-```javascript
-import { createBus } from "./core/bus.js";
-import { createLogger } from "./core/logger.js";
-
-const logger = createLogger();
-const bus = createBus(logger);
-```
-
-### `subscribe(event, handler)`
-
-Subscribes to an event.
-
-**Example:**
-
-```javascript
-bus.subscribe("user:created", (user) => {
-    console.log(`User created: ${user.username}`);
-});
-```
-
-### `once(event, handler)`
-
-Subscribes to an event once.
-
-**Example:**
-
-```javascript
-bus.once("user:deleted", (user) => {
-    console.log(`User deleted: ${user.username}`);
-});
-```
-
-### `publish(event, payload)`
-
-Publishes an event.
-
-**Example:**
-
-```javascript
-bus.publish("user:created", { username: "test" });
-```
-
-## Command Handler (`core/commandHandler.js`)
-
-The `commandHandler.js` file is responsible for registering and handling slash commands.
-
-### `createCommandHandler(client, logger, config)`
-
-Creates a new command handler instance.
-
-**Example:**
-
-```javascript
-import { createCommandHandler } from "./core/commandHandler.js";
-import { Client } from "discord.js";
-import { createLogger } from "./core/logger.js";
-import { createConfig } from "./core/config.js";
-
-const client = new Client({ intents: [] });
-const logger = createLogger();
-const config = createConfig();
-const commandHandler = createCommandHandler(client, logger, config);
-```
-
-### `registerSlash(moduleName, ...builders)`
-
-Registers a slash command.
-
-**Example:**
-
-```javascript
-import { SlashCommandBuilder } from "discord.js";
-
-const myCommand = new SlashCommandBuilder()
-    .setName("ping")
-    .setDescription("Replies with pong!");
-
-commandHandler.registerSlash("my-module", myCommand);
-```
-
-### `onInteractionCreate(moduleName, handler)`
-
-Sets a handler for when an interaction is created.
-
-**Example:**
-
-```javascript
-commandHandler.onInteractionCreate("my-module", (interaction) => {
-    if (!interaction.isCommand()) return;
-
-    if (interaction.commandName === "ping") {
-        interaction.reply("Pong!");
-    }
-});
-```
-
-### `installGuild(guildId)`
-
-Installs all registered commands to a specific guild.
-
-**Example:**
-
-```javascript
-commandHandler.installGuild("1234567890");
-```
-
-### `installGlobal()`
-
-Installs all registered commands globally.
-
-**Example:**
-
-```javascript
-commandHandler.installGlobal();
-```
-
-### `removeModule(moduleName)`
-
-Removes all commands and handlers for a specific module.
-
-**Example:**
-
-```javascript
-commandHandler.removeModule("my-module");
-```
-
-## Config (`core/config.js`)
-
-The `config.js` file provides a simple way to access environment variables.
-
-### `createConfig()`
-
-Creates a new config instance.
-
-**Example:**
-
-```javascript
-import { createConfig } from "./core/config.js";
-
-const config = createConfig();
-```
-
-### `get(key, fallback = undefined)`
-
-Gets a value from the environment variables.
-
-**Example:**
-
-```javascript
-const token = config.get("DISCORD_TOKEN");
-```
-
-### `getBool(key, fallback = false)`
-
-Gets a boolean value from the environment variables.
-
-**Example:**
-
-```javascript
-const debug = config.getBool("DEBUG");
-```
-
-### `require(keys)`
-
-Requires that a set of keys exist in the environment variables.
-
-**Example:**
-
-```javascript
-config.require(["DISCORD_TOKEN", "DISCORD_CLIENT_ID"]);
-```
-
-### `isEnabled(flagName, defaultVal = true)`
-
-Checks if a feature flag is enabled.
-
-**Example:**
-
-```javascript
-if (config.isEnabled("MY_FEATURE")) {
-    // ...
-}
-```
-
-## DSL (`core/dsl.js`)
-
-The `dsl.js` file provides a set of "Domain Specific Language" helpers to simplify common tasks.
-
-### `createDsl({ logger, embed, rateLimiter, permissions, errorReporter, i18n })`
-
-Creates a new DSL instance.
-
-**Example:**
-
-```javascript
-import { createDsl } from "./core/dsl.js";
-// ... import other dependencies
-
-const dsl = createDsl({ logger, embed, rateLimiter, permissions, errorReporter, i18n });
-```
-
-### `withTryCatch(handler, { errorMessage } = {})`
-
-Wraps a handler in a try/catch block.
-
-**Example:**
-
-```javascript
-const myHandler = dsl.withTryCatch(async (interaction) => {
-    // ...
-});
-```
-
-### `withDeferredReply(handler, { ephemeral } = {})`
-
-Defers the reply to an interaction.
-
-**Example:**
-
-```javascript
-const myHandler = dsl.withDeferredReply(async (interaction) => {
-    // ...
-});
-```
-
-### `withCooldown(handler, { keyFn, capacity, refillPerSec, message } = {})`
-
-Adds a cooldown to a handler.
-
-**Example:**
-
-```javascript
-const myHandler = dsl.withCooldown(async (interaction) => {
-    // ...
-}, { keyFn: (interaction) => interaction.user.id });
-```
-
-### `withPerms(handler, { userPerms, botPerms } = {})`
-
-Checks for permissions before executing a handler.
-
-**Example:**
-
-```javascript
-const myHandler = dsl.withPerms(async (interaction) => {
-    // ...
-}, { userPerms: ["KICK_MEMBERS"] });
-```
-
-### `withConfirmation(prompt, handler, { confirmLabel, cancelLabel, ephemeral } = {})`
-
-Shows a confirmation dialog before executing a handler.
-
-**Example:**
-
-```javascript
-const myHandler = dsl.withConfirmation("Are you sure?", async (interaction) => {
-    // ...
-});
-```
-
-### `withPreconditions(handler, ...preconditions)`
-
-Adds preconditions to a handler.
-
-**Example:**
-
-```javascript
-const myHandler = dsl.withPreconditions(async (interaction) => {
-    // ...
-}, (interaction) => interaction.user.id === "1234567890");
-```
-
-## Embed (`core/embed.js`)
-
-The `embed.js` file provides a simple way to create embeds.
-
-### `createEmbed(config)`
-
-Creates a new embed builder instance.
-
-**Example:**
-
-```javascript
-import { createEmbed } from "./core/embed.js";
-import { createConfig } from "./core/config.js";
-
-const config = createConfig();
-const embed = createEmbed(config);
-```
-
-### `base(color, opts = {})`
-
-Creates a base embed.
-
-**Example:**
-
-```javascript
-const myEmbed = embed.base(0x00FF00, { title: "My Embed" });
-```
-
-### `success(opts = {})`
-
-Creates a success embed.
-
-**Example:**
-
-```javascript
-const myEmbed = embed.success({ title: "Success!" });
-```
-
-### `error(opts = {})`
-
-Creates an error embed.
-
-**Example:**
-
-```javascript
-const myEmbed = embed.error({ title: "Error!" });
-```
-
-### `info(opts = {})`
-
-Creates an info embed.
-
-**Example:**
-
-```javascript
-const myEmbed = embed.info({ title: "Info" });
-```
-
-### `warn(opts = {})`
-
-Creates a warning embed.
-
-**Example:**
-
-```javascript
-const myEmbed = embed.warn({ title: "Warning!" });
-```
-
-### `neutral(opts = {})`
-
-Creates a neutral embed.
-
-**Example:**
-
-```javascript
-const myEmbed = embed.neutral({ title: "Neutral" });
-```
-
-## Events (`core/events.js`)
-
-The `events.js` file provides a way to listen to Discord events.
-
-### `createEvents(client, logger)`
-
-Creates a new event handler instance.
-
-**Example:**
-
-```javascript
-import { createEvents } from "./core/events.js";
-import { Client } from "discord.js";
-import { createLogger } from "./core/logger.js";
-
-const client = new Client({ intents: [] });
-const logger = createLogger();
-const events = createEvents(client, logger);
-```
-
-### `on(moduleName, event, handler)`
-
-Listens to an event.
-
-**Example:**
-
-```javascript
-events.on("my-module", "messageCreate", (message) => {
-    console.log(message.content);
-});
-```
-
-### `once(moduleName, event, handler)`
-
-Listens to an event once.
-
-**Example:**
-
-```javascript
-events.once("my-module", "ready", () => {
-    console.log("Ready!");
-});
-```
-
-### `off(moduleName, event, handler)`
-
-Stops listening to an event.
-
-**Example:**
-
-```javascript
-const handler = (message) => console.log(message.content);
-events.on("my-module", "messageCreate", handler);
-events.off("my-module", "messageCreate", handler);
-```
-
-### `addListener(moduleName, emitter, event, handler, { once = false } = {})`
-
-Adds a listener to any event emitter.
-
-**Example:**
-
-```javascript
-import { EventEmitter } from "events";
-const myEmitter = new EventEmitter();
-events.addListener("my-module", myEmitter, "myEvent", () => {
-    console.log("myEvent triggered!");
-});
-myEmitter.emit("myEvent");
-```
-
-### `removeModule(moduleName)`
-
-Removes all listeners for a specific module.
-
-**Example:**
-
-```javascript
-events.removeModule("my-module");
-```
-
-## Guild Config (`core/guildConfig.js`)
-
-The `guildConfig.js` file provides a way to store configuration for a specific guild.
-
-### `createGuildConfig({ mongo, logger, config })`
-
-Creates a new guild config instance.
-
-**Example:**
-
-```javascript
-import { createGuildConfig } from "./core/guildConfig.js";
-// ... import other dependencies
-
-const guildConfig = createGuildConfig({ mongo, logger, config });
-```
-
-### `setLocale(guildId, locale)`
-
-Sets the locale for a guild.
-
-**Example:**
-
-```javascript
-guildConfig.setLocale("1234567890", "en-US");
-```
-
-### `getLocale(guildId)`
-
-Gets the locale for a guild.
-
-**Example:**
-
-```javascript
-const locale = guildConfig.getLocale("1234567890");
-```
-
-### `set(guildId, key, value)`
-
-Sets a value for a guild.
-
-**Example:**
-
-```javascript
-guildConfig.set("1234567890", "prefix", "!");
-```
-
-### `get(guildId, key, fallback = undefined)`
-
-Gets a value for a guild.
-
-**Example:**
-
-```javascript
-const prefix = guildConfig.get("1234567890", "prefix", "!");
-```
-
-## HTTP (`core/http.js`)
-
-The `http.js` file provides a simple way to make HTTP requests.
-
-### `createHttp(config, logger)`
-
-Creates a new HTTP client instance.
-
-**Example:**
-
-```javascript
-import { createHttp } from "./core/http.js";
-import { createConfig } from "./core/config.js";
-import { createLogger } from "./core/logger.js";
-
-const config = createConfig();
-const logger = createLogger();
-const http = createHttp(config, logger);
-```
-
-### `request(method, url, { headers, body, timeoutMs, retries } = {})`
-
-Makes an HTTP request.
-
-**Example:**
-
-```javascript
-const response = await http.request("GET", "https://api.example.com/users");
-```
-
-### `get(url, opts = {})`
-
-Makes a GET request.
-
-**Example:**
-
-```javascript
-const response = await http.get("https://api.example.com/users");
-```
-
-### `post(url, data, opts = {})`
-
-Makes a POST request.
-
-**Example:**
-
-```javascript
-const response = await http.post("https://api.example.com/users", { name: "test" });
-```
-
-### `patch(url, data, opts = {})`
-
-Makes a PATCH request.
-
-**Example:**
-
-```javascript
-const response = await http.patch("https://api.example.com/users/1", { name: "test2" });
-```
-
-### `delete(url, opts = {})`
-
-Makes a DELETE request.
-
-**Example:**
-
-```javascript
-const response = await http.delete("https://api.example.com/users/1");
-```
-
-## i18n (`core/i18n.js`)
-
-The `i18n.js` file provides a simple way to handle internationalization.
-
-### `createI18n({ config, logger })`
-
-Creates a new i18n instance.
-
-**Example:**
-
-```javascript
-import { createI18n } from "./core/i18n.js";
-import { createConfig } from "./core/config.js";
-import { createLogger } from "./core/logger.js";
-
-const config = createConfig();
-const logger = createLogger();
-const i18n = createI18n({ config, logger });
-```
-
-### `t({ key, params, locale, moduleName } = {})`
-
-Translates a key.
-
-**Example:**
-
-```javascript
-i18n.register("en", { "hello": "Hello, {name}!" });
-const greeting = i18n.t({ key: "hello", params: { name: "world" } });
-```
-
-### `safeT(key, { defaultValue, locale, moduleName, params } = {})`
-
-Safely translates a key.
-
-**Example:**
-
-```javascript
-const greeting = i18n.safeT("goodbye", { defaultValue: "Goodbye!" });
-```
-
-### `register(locale, entries)`
-
-Registers a set of translations.
-
-**Example:**
-
-```javascript
-i18n.register("en", { "hello": "Hello!" });
-```
-
-## IDs (`core/ids.js`)
-
-The `ids.js` file provides a way to create and parse custom IDs for interactions.
-
-### `createIds()`
-
-Creates a new ID generator instance.
-
-**Example:**
-
-```javascript
-import { createIds } from "./core/ids.js";
-
-const ids = createIds();
-```
-
-### `make(moduleName, type, name, extras = {})`
-
-Creates a custom ID.
-
-**Example:**
-
-```javascript
-const myId = ids.make("my-module", "button", "my-button", { userId: "1234567890" });
-```
-
-### `parse(customId)`
-
-Parses a custom ID.
-
-**Example:**
-
-```javascript
-const { module, type, name, extras } = ids.parse(myId);
-```
-
-## Interactions (`core/interactions.js`)
-
-The `interactions.js` file provides a way to handle interactions.
-
-### `createInteractions(client, logger)`
-
-Creates a new interaction handler instance.
-
-**Example:**
-
-```javascript
-import { createInteractions } from "./core/interactions.js";
-import { Client } from "discord.js";
-import { createLogger } from "./core/logger.js";
-
-const client = new Client({ intents: [] });
-const logger = createLogger();
-const interactions = createInteractions(client, logger);
-```
-
-### `registerButton(moduleName, customId, handler, { prefix = false } = {})`
-
-Registers a button handler.
-
-**Example:**
-
-```javascript
-interactions.registerButton("my-module", "my-button", (interaction) => {
-    interaction.reply("Button clicked!");
-});
-```
-
-### `registerSelect(moduleName, customId, handler, { prefix = false } = {})`
-
-Registers a select menu handler.
-
-**Example:**
-
-```javascript
-interactions.registerSelect("my-module", "my-select", (interaction) => {
-    interaction.reply(`You selected: ${interaction.values.join(", ")}`);
-});
-```
-
-### `registerModal(moduleName, customId, handler, { prefix = false } = {})`
-
-Registers a modal handler.
-
-**Example:**
-
-```javascript
-interactions.registerModal("my-module", "my-modal", (interaction) => {
-    const favoriteColor = interaction.fields.getTextInputValue("favoriteColorInput");
-    interaction.reply(`Your favorite color is ${favoriteColor}`);
-});
-```
-
-### `registerUserContext(moduleName, commandName, handler)`
-
-Registers a user context menu handler.
-
-**Example:**
-
-```javascript
-interactions.registerUserContext("my-module", "Get User Info", (interaction) => {
-    interaction.reply(`User: ${interaction.targetUser.username}`);
-});
-```
-
-### `registerMessageContext(moduleName, commandName, handler)`
-
-Registers a message context menu handler.
-
-**Example:**
-
-```javascript
-interactions.registerMessageContext("my-module", "Get Message Info", (interaction) => {
-    interaction.reply(`Message: ${interaction.targetMessage.content}`);
-});
-```
-
-### `removeModule(moduleName)`
-
-Removes all interaction handlers for a specific module.
-
-**Example:**
-
-```javascript
-interactions.removeModule("my-module");
-```
-
-## Logger (`core/logger.js`)
-
-The `logger.js` file provides a simple way to log messages.
-
-### `createLogger(level = "info")`
-
-Creates a new logger instance.
-
-**Example:**
-
-```javascript
-import { createLogger } from "./core/logger.js";
-
-const logger = createLogger();
-```
-
-### `childLogger(parent, moduleName)`
-
-Creates a child logger.
-
-**Example:**
-
-```javascript
-import { createLogger, childLogger } from "./core/logger.js";
-
-const parentLogger = createLogger();
-const myModuleLogger = childLogger(parentLogger, "my-module");
-```
-
-## Metrics (`core/metrics.js`)
-
-The `metrics.js` file provides a simple way to collect metrics.
-
-### `createMetrics(logger)`
-
-Creates a new metrics instance.
-
-**Example:**
-
-```javascript
-import { createMetrics } from "./core/metrics.js";
-import { createLogger } from "./core/logger.js";
-
-const logger = createLogger();
-const metrics = createMetrics(logger);
-```
-
-### `counter(name)`
-
-Creates a counter.
-
-**Example:**
-
-```javascript
-const myCounter = metrics.counter("my-counter");
-myCounter.inc();
-```
-
-### `gauge(name)`
-
-Creates a gauge.
-
-**Example:**
-
-```javascript
-const myGauge = metrics.gauge("my-gauge");
-myGauge.set(100);
-```
-
-### `timer(name)`
-
-Creates a timer.
-
-**Example:**
-
-```javascript
-const myTimer = metrics.timer("my-timer");
-myTimer.start();
-// ...
-myTimer.stop();
-```
-
-## Mongo (`core/mongo.js`)
-
-The `mongo.js` file provides a simple way to interact with a MongoDB database.
-
-### `createMongo(config, logger)`
-
-Creates a new MongoDB client instance.
-
-**Example:**
-
-```javascript
-import { createMongo } from "./core/mongo.js";
-import { createConfig } from "./core/config.js";
-import { createLogger } from "./core/logger.js";
-
-const config = createConfig();
-const logger = createLogger();
-const mongo = createMongo(config, logger);
-```
-
-### `getDb()`
-
-Gets the database instance.
-
-**Example:**
-
-```javascript
-const db = await mongo.getDb();
-```
-
-### `getCollection(name)`
-
-Gets a collection.
-
-**Example:**
-
-```javascript
-const users = await mongo.getCollection("users");
-```
-
-### `ping()`
-
-Pings the database.
-
-**Example:**
-
-```javascript
-const result = await mongo.ping();
-```
-
-### `close()`
-
-Closes the database connection.
-
-**Example:**
-
-```javascript
-await mongo.close();
-```
-
-## Permissions (`core/permissions.js`)
-
-The `permissions.js` file provides a simple way to check for permissions.
-
-### `createPermissions(embed, logger)`
-
-Creates a new permissions handler instance.
-
-**Example:**
-
-```javascript
-import { createPermissions } from "./core/permissions.js";
-import { createEmbed } from "./core/embed.js";
-import { createLogger } from "./core/logger.js";
-
-const embed = createEmbed();
-const logger = createLogger();
-const permissions = createPermissions(embed, logger);
-```
-
-### `hasUserPerms(member, perms = [])`
-
-Checks if a user has a set of permissions.
-
-**Example:**
-
-```javascript
-if (permissions.hasUserPerms(interaction.member, ["KICK_MEMBERS"])) {
-    // ...
-}
-```
-
-### `hasBotPerms(guild, perms = [])`
-
-Checks if the bot has a set of permissions.
-
-**Example:**
-
-```javascript
-if (permissions.hasBotPerms(interaction.guild, ["KICK_MEMBERS"])) {
-    // ...
-}
-```
-
-### `ensureInteractionPerms(interaction, { userPerms = [], botPerms = [] } = {})`
-
-Ensures that the user and bot have the required permissions for an interaction.
-
-**Example:**
-
-```javascript
-await permissions.ensureInteractionPerms(interaction, { userPerms: ["KICK_MEMBERS"] });
-```
-
-## Rate Limiter (`core/rateLimiter.js`)
-
-The `rateLimiter.js` file provides a simple way to rate limit actions.
-
-### `createRateLimiter(logger)`
-
-Creates a new rate limiter instance.
-
-**Example:**
-
-```javascript
-import { createRateLimiter } from "./core/rateLimiter.js";
-import { createLogger } from "./core/logger.js";
-
-const logger = createLogger();
-const rateLimiter = createRateLimiter(logger);
-```
-
-### `take(key, opts)`
-
-Takes a token from the rate limiter.
-
-**Example:**
-
-```javascript
-const { allowed } = rateLimiter.take(interaction.user.id);
-if (!allowed) {
-    // ...
-}
-```
-
-### `setConfig(key, { capacity, refillPerSec })`
-
-Sets the configuration for a rate limiter.
-
-**Example:**
-
-```javascript
-rateLimiter.setConfig(interaction.user.id, { capacity: 5, refillPerSec: 1 });
-```
-
-### `clear(key)`
-
-Clears a rate limiter.
-
-**Example:**
-
-```javascript
-rateLimiter.clear(interaction.user.id);
-```
-
-### `resetAll()`
-
-Resets all rate limiters.
-
-**Example:**
-
-```javascript
-rateLimiter.resetAll();
-```
-
-## Reporting (`core/reporting.js`)
-
-The `reporting.js` file provides a simple way to report errors.
-
-### `createErrorReporter({ config, logger })`
-
-Creates a new error reporter instance.
-
-**Example:**
-
-```javascript
-import { createErrorReporter } from "./core/reporting.js";
-import { createConfig } from "./core/config.js";
-import { createLogger } from "./core/logger.js";
-
-const config = createConfig();
-const logger = createLogger();
-const errorReporter = createErrorReporter({ config, logger });
-```
-
-### `report(error, context = {})`
-
-Reports an error.
-
-**Example:**
-
-```javascript
+Example:
 try {
-    // ...
-} catch (error) {
-    errorReporter.report(error);
+  // ...
+} catch (err) {
+  await ctx.errorReporter.report(err, { scope: "my-module", op: "refresh" });
+}
+
+
+
+IDs and Builders v2
+
+Interaction Command Builder API in core/builders.js
+
+A. createInteractionCommand() and new InteractionCommandBuilder()
+- What: v2 builder that defines a slash command and co-located component handlers with scoped customIds.
+- Core methods:
+  - setName(name)
+  - setDescription(desc)
+  - setDefaultMemberPermissions(perm)
+  - addOption(fn) and typed aliases:
+    - addUserOption(fn), addStringOption(fn), addIntegerOption(fn), addNumberOption(fn),
+      addBooleanOption(fn), addChannelOption(fn), addRoleOption(fn),
+      addMentionableOption(fn), addAttachmentOption(fn)
+  - onExecute(handler)
+  - onButton(localName, handler)
+  - onSelect(localName, handler)
+  - onModal(localName, handler)
+  - onAutocomplete(optionName, handler)
+  - addPrecondition(fn) where fn is async (interaction) => boolean|string
+  - toSlashJson() -> command JSON
+  - register(ctx, moduleName, { stateManager? }) -> { off }
+    - Registers slash JSON, routes execute/autocomplete, and registers component handlers with scoped IDs.
+  - Convenience component builders that auto-scope customId:
+    - button(ctx, moduleName, localName, label, style?, extras?)
+    - select(ctx, moduleName, localName, placeholder?, options?)
+    - userSelect(ctx, moduleName, localName, { placeholder?, minValues?, maxValues? })
+    - modal(ctx, moduleName, localName, title)
+    - textInput(customId, label, style?, required?)
+
+Why: Co-locate all interaction pieces of a command for maintainability and automatic ID scoping.
+
+Example:
+const b = ctx.v2.createInteractionCommand()
+  .setName("hello")
+  .setDescription("Say hello")
+  .onExecute(async (i) => {
+    await i.reply("Hello!");
+  })
+  .onButton("wave", async (i) => {
+    await i.update({ content: "o/" });
+  });
+
+const off = b.register(ctx, "my-module", { stateManager: ctx.v2.state });
+ctx.lifecycle.addDisposable(off);
+
+B. createBuilderRegistry()
+- registry = ctx.v2.builders
+- registry.add(moduleName, builder) -> unregister()
+- registry.list(moduleName) -> builder[]
+- registry.clearModule(moduleName)
+
+Why: Track builders by module for install/migration flows.
+
+C. State Manager for v2 builders
+createStateManager(logger, { provider?, options? }) in core/state.js
+- ctx.v2.state is provided in module context.
+- High-level:
+  - state.forInteraction(interaction, ttlMs?) -> Map-like async facade { get, set, has, delete, clear, keys, values, entries }
+  - state.withKey(key, ttlMs?) -> same API bound to arbitrary key
+  - state.dispose()
+  - kind: "memory" | "file" | "mongo"
+
+Why: Maintain step state across component interactions and modals.
+
+Example:
+const state = ctx.v2.state.forInteraction(i);
+await state.set("page", 0);
+const page = await state.get("page");
+
+
+
+UI Helpers
+
+Located in core/ui.js
+
+- createPaginatedEmbed(ctx, builder, moduleName, pages, { ephemeral?, initialIndex? })
+  - Returns { message, dispose }
+  - message is a payload ready for reply/update
+  - Registers Previous/Next button handlers
+  - Why: Quick pagination for multi-page content
+  - Example:
+    const { message, dispose } = ctx.v2.ui.createPaginatedEmbed(ctx, b, "my-module", [
+      { title: "Page 1", description: "..." },
+      { title: "Page 2", description: "..." },
+    ]);
+    await interaction.reply(message);
+    ctx.lifecycle.addDisposable(dispose);
+
+- createConfirmationDialog(ctx, builder, moduleName, prompt, onConfirm, onCancel, { ephemeral? })
+  - Returns { message, dispose }
+  - Why: Reusable confirm/cancel flow with scoped buttons.
+
+- createMultiSelectMenu(ctx, builder, moduleName, options, onSelect, { placeholder?, maxValues?, ephemeral? })
+  - Returns { message, dispose }
+  - Why: Simplify select menus with routing.
+
+- createForm(ctx, builder, moduleName, { title, fields })
+  - Returns { modal, message, open, modalId }
+  - Why: Quickly build and open a modal form.
+  - Combine with parseModal() to read submitted values.
+
+- parseModal(interaction)
+  - Parses submitted modal interaction into a plain object keyed by field name.
+
+- createWizard(ctx, builder, moduleName, state, steps)
+  - Returns { start, dispose }
+  - Steps: [{ render: s => payload, onNext?: (interaction, state) }]
+  - Why: Multi-step flows with Next/Cancel and state persistence.
+
+
+
+Command Installation Utilities
+
+From ctx.commands:
+- installGuild(guildId): Install current registry to a guild.
+- installGlobal(): Install globally.
+- Strategy controlled via env:
+  - COMMAND_DEPLOY_STRATEGY: bulk | diff | auto (default bulk)
+  - COMMANDS_DRY_RUN: true/false
+
+
+
+Internationalization Convenience
+
+From ctx.i18n and ctx.t():
+- Prefer ctx.t for translating messages in your module; it handles module fallback and locale resolution.
+
+
+
+Mongo and other services
+
+createMongo() exists and is wired in core/index.js, but its detailed API is not included in the scanned files. If your module needs DB access, consult core/mongo.js for the exact API. The state manager also offers an optional Mongo provider via options.mongo. Use ctx.v2.state if you need persisted state for interactions.
+
+
+
+Complete example: a minimal v2 command with DSL and UI
+
+```js
+import { createInteractionCommand } from "core";
+
+export function setup(ctx) {
+  const b = ctx.v2.createInteractionCommand()
+    .setName("demo")
+    .setDescription("Demonstration")
+    .addStringOption(opt => opt.setName("q").setDescription("Query"))
+    .onExecute(ctx.dsl.withTryCatch(
+      ctx.dsl.withDeferredReply(async (i) => {
+        const args = i.options.getString("q");
+        const pages = [
+          { title: "Result 1", description: String(args ?? "") },
+          { title: "Result 2", description: "More..." },
+        ];
+        const { message, dispose } = ctx.v2.ui.createPaginatedEmbed(ctx, b, "my-module", pages);
+        await i.editReply(message);
+        ctx.lifecycle.addDisposable(dispose);
+      })
+    ))
+    .onButton("refresh", async (i) => {
+      await i.update({ content: "Refreshed." });
+    });
+
+  const off = b.register(ctx, "my-module", { stateManager: ctx.v2.state });
+  ctx.lifecycle.addDisposable(off);
 }
 ```
 
-## Result (`core/result.js`)
 
-The `result.js` file provides a simple way to return results from functions.
 
-### `Result.ok(value)`
+Why this design
 
-Returns a success result.
-
-**Example:**
-
-```javascript
-import { Result } from "./core/result.js";
-
-function myFunc() {
-    return Result.ok("Success!");
-}
-```
-
-### `Result.err(code, message, meta = {})`
-
-Returns an error result.
-
-**Example:**
-
-```javascript
-import { Result, ErrorCodes } from "./core/result.js";
-
-function myFunc() {
-    return Result.err(ErrorCodes.UNKNOWN, "An error occurred.");
-}
-```
-
-## Scheduler (`core/scheduler.js`)
-
-The `scheduler.js` file provides a simple way to schedule tasks.
-
-### `createScheduler(logger)`
-
-Creates a new scheduler instance.
-
-**Example:**
-
-```javascript
-import { createScheduler } from "./core/scheduler.js";
-import { createLogger } from "./core/logger.js";
-
-const logger = createLogger();
-const scheduler = createScheduler(logger);
-```
-
-### `schedule(cronExpr, fn, { timezone, immediate = false } = {})`
-
-Schedules a task.
-
-**Example:**
-
-```javascript
-scheduler.schedule("* * * * *", () => {
-    console.log("This runs every minute!");
-});
-```
-
-### `stopAll()`
-
-Stops all scheduled tasks.
-
-**Example:**
-
-```javascript
-scheduler.stopAll();
-```
-
-### `list()`
-
-Lists all scheduled tasks.
-
-**Example:**
-
-```javascript
-const numTasks = scheduler.list();
-```
-
-## State (`core/state.js`)
-
-The `state.js` file provides a simple way to manage state.
-
-### `createStateManager(logger, { provider = "memory", options = {} } = {})`
-
-Creates a new state manager instance.
-
-**Example:**
-
-```javascript
-import { createStateManager } from "./core/state.js";
-import { createLogger } from "./core/logger.js";
-
-const logger = createLogger();
-const stateManager = createStateManager(logger);
-```
-
-### `withKey(key, ttlMs = defaultTtlMs)`
-
-Gets a state object for a specific key.
-
-**Example:**
-
-```javascript
-const myState = stateManager.withKey("my-key");
-await myState.set("foo", "bar");
-```
-
-### `forInteraction(interaction, ttlMs = defaultTtlMs)`
-
-Gets a state object for a specific interaction.
-
-**Example:**
-
-```javascript
-const interactionState = stateManager.forInteraction(interaction);
-await interactionState.set("foo", "bar");
-```
-
-### `dispose()`
-
-Disposes of the state manager.
-
-**Example:**
-
-```javascript
-stateManager.dispose();
-```
-
-## UI (`core/ui.js`)
-
-The `ui.js` file provides a set of high-level UI helpers.
-
-### `createPaginatedEmbed(ctx, builder, moduleName, pages, { ephemeral = true, initialIndex = 0 } = {})`
-
-Creates a paginated embed.
-
-**Example:**
-
-```javascript
-import { createPaginatedEmbed } from "./core/ui.js";
-
-const pages = [
-    { title: "Page 1" },
-    { title: "Page 2" },
-];
-
-const { message, dispose } = createPaginatedEmbed(ctx, builder, "my-module", pages);
-await interaction.reply(message);
-```
-
-### `createConfirmationDialog(ctx, builder, moduleName, prompt, onConfirm, onCancel, { ephemeral = true } = {})`
-
-Creates a confirmation dialog.
-
-**Example:**
-
-```javascript
-import { createConfirmationDialog } from "./core/ui.js";
-
-const { message, dispose } = createConfirmationDialog(ctx, builder, "my-module", "Are you sure?", (interaction) => {
-    interaction.reply("Confirmed!");
-});
-await interaction.reply(message);
-```
-
-### `createMultiSelectMenu(ctx, builder, moduleName, options, onSelect, { placeholder = "Select...", maxValues = 1, ephemeral = true } = {})`
-
-Creates a multi-select menu.
-
-**Example:**
-
-```javascript
-import { createMultiSelectMenu } from "./core/ui.js";
-
-const options = [
-    { label: "Option 1", value: "1" },
-    { label: "Option 2", value: "2" },
-];
-
-const { message, dispose } = createMultiSelectMenu(ctx, builder, "my-module", options, (interaction, values) => {
-    interaction.reply(`You selected: ${values.join(", ")}`);
-});
-await interaction.reply(message);
-```
-
-### `createForm(ctx, builder, moduleName, { title, fields })`
-
-Creates a form.
-
-**Example:**
-
-```javascript
-import { createForm } from "./core/ui.js";
-
-const { modal, open } = createForm(ctx, builder, "my-module", {
-    title: "My Form",
-    fields: [
-        { name: "name", label: "Name" },
-    ],
-});
-
-await open(interaction);
-```
-
-### `parseModal(interaction)`
-
-Parses a modal submission.
-
-**Example:**
-
-```javascript
-myCommand.onModal("my-modal", (interaction) => {
-    const { name } = parseModal(interaction);
-    interaction.reply(`Your name is ${name}`);
-});
-```
+- Clear separation of concerns (commands, interactions, events, UI, DSL).
+- Strong module isolation and lifecycle cleanup to support hot-reload/unload.
+- Opinionated helpers (DSL, UI, embeds, ids) to minimize repetitive boilerplate.
+- Extensible v2 builder co-locates command logic with components and autocomplete.
