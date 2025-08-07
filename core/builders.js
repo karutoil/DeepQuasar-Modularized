@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, UserSelectMenuBuilder, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 
 /**
  * v2 Interaction Command Builder
@@ -150,6 +150,47 @@ constructor() {
         await handler(interaction, state);
       });
       disposers.push(offUser);
+
+      // Register for ChannelSelect menus (type 8)
+      const channelId = this._makeId(moduleName, "csel", local);
+      ctx.logger?.debug?.("[Core] Registering ChannelSelectMenu handler", {
+        moduleName,
+        commandName: this._name,
+        localName: local,
+        customId: channelId,
+        handlerExists: !!handler
+      });
+      const offChannel = ctx.interactions.registerSelect(moduleName, channelId, async (interaction) => {
+        ctx.logger?.debug?.("[Core] ChannelSelectMenu handler invoked", {
+          moduleName,
+          commandName: this._name,
+          localName: local,
+          customId: channelId
+        });
+        const state = stateManager ? stateManager.forInteraction(interaction) : null;
+        await handler(interaction, state);
+      });
+      disposers.push(offChannel);
+      // Register for RoleSelect menus (type 7)
+      const roleId = this._makeId(moduleName, "rsel", local);
+      ctx.logger?.debug?.("[Core] Registering RoleSelectMenu handler", {
+        moduleName,
+        commandName: this._name,
+        localName: local,
+        customId: roleId,
+        handlerExists: !!handler
+      });
+      const offRole = ctx.interactions.registerSelect(moduleName, roleId, async (interaction) => {
+        ctx.logger?.debug?.("[Core] RoleSelectMenu handler invoked", {
+          moduleName,
+          commandName: this._name,
+          localName: local,
+          customId: roleId
+        });
+        const state = stateManager ? stateManager.forInteraction(interaction) : null;
+        await handler(interaction, state);
+      });
+      disposers.push(offRole);
     }
     for (const [local, handler] of this._modals.entries()) {
       const id = this._makeId(moduleName, "modal", local);
@@ -204,12 +245,44 @@ constructor() {
   }
 
   /**
+   * Build a Discord Channel Select Menu (type=CHANNEL) with scoped customId.
+   * minValues defaults to 1, maxValues defaults to 1 (override as needed).
+   */
+  channelSelect(ctx, moduleName, localName, { placeholder = "Select channel...", minValues = 1, maxValues = 1, channelTypes = [] } = {}) {
+    // Discord.js v14+ ChannelSelectMenuBuilder
+    const id = this._makeId(moduleName, "csel", localName);
+    const menu = new ChannelSelectMenuBuilder()
+      .setCustomId(id)
+      .setPlaceholder(placeholder)
+      .setMinValues(Math.max(0, Math.min(minValues, 25)))
+      .setMaxValues(Math.max(1, Math.min(maxValues, 25)));
+    if (Array.isArray(channelTypes) && channelTypes.length) {
+      menu.setChannelTypes(channelTypes);
+    }
+    return menu;
+  }
+
+  /**
    * Build a Discord User Select Menu (type=USER) with scoped customId.
    * minValues defaults to 1, maxValues defaults to 1 (override as needed).
    */
   userSelect(ctx, moduleName, localName, { placeholder = "Select users...", minValues = 1, maxValues = 1 } = {}) {
     const id = this._makeId(moduleName, "usel", localName);
     const menu = new UserSelectMenuBuilder()
+      .setCustomId(id)
+      .setPlaceholder(placeholder)
+      .setMinValues(Math.max(0, Math.min(minValues, 25)))
+      .setMaxValues(Math.max(1, Math.min(maxValues, 25)));
+    return menu;
+  }
+
+  /**
+   * Build a Discord Role Select Menu (type=ROLE) with scoped customId.
+   * minValues defaults to 1, maxValues defaults to 1 (override as needed).
+   */
+  roleSelect(ctx, moduleName, localName, { placeholder = "Select roles...", minValues = 1, maxValues = 1 } = {}) {
+    const id = this._makeId(moduleName, "rsel", localName);
+    const menu = new RoleSelectMenuBuilder()
       .setCustomId(id)
       .setPlaceholder(placeholder)
       .setMinValues(Math.max(0, Math.min(minValues, 25)))

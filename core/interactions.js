@@ -149,7 +149,23 @@ export function createInteractions(client, logger) {
         return;
       }
 
-      // Other select menus (string, role, channel, mentionable)
+      // ChannelSelectMenu (componentType: 8)
+      if (interaction.componentType === 8) {
+        logger.debug("[Core] ChannelSelectMenu dispatch", {
+          customId: interaction.customId,
+          componentType: interaction.componentType,
+          isAnySelectMenu: typeof interaction.isAnySelectMenu === "function" ? interaction.isAnySelectMenu() : undefined,
+          values: interaction.values,
+          type: interaction.type
+        });
+        const id = interaction.customId;
+        const h = findByExactOrPrefix(id, selectsByModule, selectPrefixesByModule);
+        logger.debug("[Core] About to call handler for select menu", { customId: interaction.customId, handlerExists: !!h });
+        if (h) return await h(interaction);
+        return;
+      }
+
+      // Other select menus (string, role, mentionable)
       if (interaction.isAnySelectMenu?.()) {
         const id = interaction.customId;
         const h = findByExactOrPrefix(id, selectsByModule, selectPrefixesByModule);

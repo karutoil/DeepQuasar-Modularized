@@ -7,6 +7,15 @@ import chokidar from "chokidar";
 import { createCore } from "./core/index.js";
 import { register as registerLinecount } from "./core/commands/linecount.js";
 
+// Global safeguard: raise max listeners on Console's underlying streams
+try {
+  const stdoutEE = /** @type {any} */ (process.stdout);
+  const stderrEE = /** @type {any} */ (process.stderr);
+  if (stdoutEE?.setMaxListeners) stdoutEE.setMaxListeners(200);
+  if (stderrEE?.setMaxListeners) stderrEE.setMaxListeners(200);
+} catch {}
+
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
