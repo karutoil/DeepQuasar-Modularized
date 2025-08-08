@@ -120,6 +120,21 @@ export function createInteractions(client, logger) {
       // Buttons
       if (interaction.isButton?.()) {
         const id = interaction.customId;
+        let foundModule = null;
+        let foundHandler = null;
+        for (const [mod, map] of buttonsByModule.entries()) {
+          if (map.has(id)) {
+            foundModule = mod;
+            foundHandler = map.get(id);
+            break;
+          }
+        }
+        logger.debug("[Core] Button dispatch", {
+          customId: id,
+          foundModule,
+          handlerExists: !!foundHandler,
+          allModules: Array.from(buttonsByModule.keys())
+        });
         const h = findByExactOrPrefix(id, buttonsByModule, buttonPrefixesByModule);
         if (h) return await h(interaction);
         return;
