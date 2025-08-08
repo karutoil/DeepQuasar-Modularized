@@ -77,7 +77,7 @@ export function createCommandHandler(client, logger, config) {
             const channelId = interaction.channelId;
             const channelType = interaction.channel?.type;
             const channelObjId = interaction.channel?.id;
-            logger.info('[DEBUG] Interaction Channel Context', {
+            logger.debug('[CORE] Interaction Channel Context', {
               channelId,
               channelType,
               channelObjId,
@@ -93,7 +93,7 @@ export function createCommandHandler(client, logger, config) {
               }
             });
           } catch (err) {
-            logger.warn('[DEBUG] Failed to log interaction channel context:', err);
+            logger.debug('[CORE] Failed to log interaction channel context:', err);
           }
           // v2: centralized routing first
           if (interaction.isChatInputCommand?.() === true) {
