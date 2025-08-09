@@ -31,7 +31,8 @@ export function setup(ctx) {
         }
 
         // Build embed pages for each reminder, with action buttons
-        const pages = reminders.map(rem => ({
+        const totalReminders = reminders.length;
+        const pages = reminders.map((rem, idx) => ({
           title: "Reminder",
           description: rem.message,
           fields: [
@@ -49,7 +50,7 @@ export function setup(ctx) {
             { name: "Type", value: rem.recurrence ? `Recurring (${rem.recurrence})` : "One-time", inline: true },
             ...(rem.channelId ? [{ name: "Channel", value: `<#${rem.channelId}>`, inline: true }] : [])
           ],
-          footerText: `ID: ${rem._id}`,
+          footerText: `ID: ${rem._id} | Page ${idx + 1}/${totalReminders} | Total reminders: ${totalReminders}`,
           components: [buildActionRow(rem._id)]
         }));
 
@@ -67,7 +68,8 @@ export function setup(ctx) {
             await interaction.update({ embeds: [ctx.embed.info({ title: "No reminders", description: "You have no active reminders." })], components: [] });
             return;
           }
-          const pages = reminders.map(rem => ({
+          const totalReminders = reminders.length;
+          const pages = reminders.map((rem, idx) => ({
             title: "Reminder",
             description: rem.message,
             fields: [
@@ -85,7 +87,7 @@ export function setup(ctx) {
               { name: "Type", value: rem.recurrence ? `Recurring (${rem.recurrence})` : "One-time", inline: true },
               ...(rem.channelId ? [{ name: "Channel", value: `<#${rem.channelId}>`, inline: true }] : [])
             ],
-            footerText: `ID: ${rem._id}`,
+            footerText: `ID: ${rem._id} | Page ${idx + 1}/${totalReminders} | Total reminders: ${totalReminders}`,
             components: [buildActionRow(rem._id)]
           }));
           const { message, dispose } = ctx.v2.ui.createPaginatedEmbed(ctx, builder, "reminders", pages, { ephemeral: true });

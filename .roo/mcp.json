@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "tavily": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "TAVILY_API_KEY",
+        "mcp/tavily"
+      ],
+      "env": {
+        "TAVILY_API_KEY": "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"
+      }
+    }
+  }
+}

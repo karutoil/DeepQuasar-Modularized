@@ -6,6 +6,7 @@ import { Client, GatewayIntentBits, Partials } from "discord.js";
 import chokidar from "chokidar";
 import { createCore } from "./core/index.js";
 import { register as registerLinecount } from "./core/commands/linecount.js";
+import { register as registerAutocompleteDebug } from "./core/commands/autocomplete-debug.js";
 
 // Global safeguard: raise max listeners on Console's underlying streams
 try {
@@ -78,6 +79,7 @@ async function main() {
   try {
     const coreCtx = core.createModuleContext("core-utilities");
     registerLinecount(coreCtx);
+    registerAutocompleteDebug(coreCtx);
     logger.info("Core utility commands registered");
   } catch (err) {
     logger.warn(`Failed to register core utility commands: ${err?.message}`);

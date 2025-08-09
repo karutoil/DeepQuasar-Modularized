@@ -97,7 +97,19 @@ constructor() {
     // 1) Register slash JSON
     ctx.commands.registerSlash(moduleName, this.toSlashJson());
 
-    // 2) Wire slash execution handler
+    // 2) Register v2 centralized autocomplete handlers (CRITICAL FIX)
+    const autocompleteDisposers = [];
+    for (const [optionName, handler] of this._autocomplete.entries()) {
+      ctx.logger.debug(`[AUTOCOMPLETE-DEBUG] Registering v2 centralized autocomplete`, {
+        commandName: this._name,
+        optionName,
+        moduleName
+      });
+      const offCentralized = ctx.commands.v2RegisterAutocomplete(this._name, optionName, handler);
+      autocompleteDisposers.push(offCentralized);
+    }
+
+    // 3) Wire slash execution handler
     const offExec = ctx.commands.onInteractionCreate(moduleName, async (interaction) => {
       if (!interaction.isChatInputCommand?.()) return;
       if (interaction.commandName !== this._name) return;
@@ -202,14 +214,43 @@ constructor() {
     }
 
     // 4) Autocomplete: discord.js exposes isAutocomplete()
+    const autocompleteHandlers = Array.from(this._autocomplete.keys());
+    ctx.logger.debug(`[AUTOCOMPLETE-DEBUG] Registering v2 builder autocomplete`, {
+      commandName: this._name,
+      moduleName,
+      autocompleteOptions: autocompleteHandlers,
+      hasAutocompleteHandlers: autocompleteHandlers.length > 0
+    });
+    
     const offAuto = ctx.commands.onInteractionCreate(moduleName, async (interaction) => {
       if (interaction.isAutocomplete?.() !== true) return;
       if (interaction.commandName !== this._name) return;
+      
       const focused = interaction.options.getFocused(true); // { name, value }
+      ctx.logger.debug(`[AUTOCOMPLETE-DEBUG] v2 builder autocomplete handler triggered`, {
+        commandName: this._name,
+        focusedOption: focused?.name,
+        focusedValue: focused?.value,
+        availableHandlers: autocompleteHandlers
+      });
+      
       const handler = this._autocomplete.get(focused?.name);
-      if (!handler) return;
+      if (!handler) {
+        ctx.logger.debug(`[AUTOCOMPLETE-DEBUG] No v2 builder handler found`, {
+          commandName: this._name,
+          focusedOption: focused?.name,
+          availableOptions: autocompleteHandlers
+        });
+        return;
+      }
+      
       try {
+        ctx.logger.debug(`[AUTOCOMPLETE-DEBUG] Executing v2 builder autocomplete handler`, {
+          commandName: this._name,
+          optionName: focused?.name
+        });
         await handler(interaction);
+        ctx.logger.debug(`[AUTOCOMPLETE-DEBUG] v2 builder autocomplete completed successfully`);
       } catch (err) {
         ctx.logger.error(`Autocomplete error for ${this._name}/${focused?.name}: ${err?.message}`, { stack: err?.stack });
       }
@@ -221,6 +262,7 @@ constructor() {
       try { offExec?.(); } catch {}
       try { offAuto?.(); } catch {}
       for (const d of disposers) { try { d?.(); } catch {} }
+      for (const d of autocompleteDisposers) { try { d?.(); } catch {} }
       this._registered = false;
     };
 

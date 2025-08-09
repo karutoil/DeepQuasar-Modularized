@@ -106,20 +106,58 @@ export function createCommandHandler(client, logger, config) {
             }
           } else if (interaction.isAutocomplete?.() === true) {
             const name = interaction.commandName;
+            const focused = interaction.options.getFocused(true);
+            logger.debug(`[AUTOCOMPLETE-DEBUG] v2 centralized router check`, {
+              commandName: name,
+              focusedOption: focused?.name,
+              focusedValue: focused?.value,
+              hasV2Router: v2Routers.has(name),
+              v2RouterKeys: Array.from(v2Routers.keys()),
+              autocompleteHandlers: v2Routers.get(name)?.autocomplete ? Array.from(v2Routers.get(name).autocomplete.keys()) : []
+            });
+            
             const r = v2Routers.get(name);
             if (r) {
-              const focused = interaction.options.getFocused(true);
               const fn = r.autocomplete.get(focused?.name);
               if (fn) {
-                try { await fn(interaction); } catch (err) {
+                logger.debug(`[AUTOCOMPLETE-DEBUG] v2 handler found, executing`, {
+                  commandName: name,
+                  optionName: focused?.name
+                });
+                try {
+                  await fn(interaction);
+                  logger.debug(`[AUTOCOMPLETE-DEBUG] v2 handler completed successfully`);
+                } catch (err) {
                   logger.error(`v2 autocomplete error for /${name} ${focused?.name}: ${err?.message}`, { stack: err?.stack });
                 }
+              } else {
+                logger.debug(`[AUTOCOMPLETE-DEBUG] No v2 autocomplete handler found`, {
+                  commandName: name,
+                  optionName: focused?.name,
+                  availableHandlers: Array.from(r.autocomplete.keys())
+                });
               }
+            } else {
+              logger.debug(`[AUTOCOMPLETE-DEBUG] No v2 router found for command`, {
+                commandName: name,
+                allV2Commands: Array.from(v2Routers.keys())
+              });
             }
           }
 
           // Legacy/compat routing
-          if (!interaction.isChatInputCommand?.() && !interaction.isContextMenuCommand?.()) return;
+          if (!interaction.isChatInputCommand?.() && !interaction.isContextMenuCommand?.() && !interaction.isAutocomplete?.()) return;
+          
+          // Add debug logging for legacy autocomplete handlers
+          if (interaction.isAutocomplete?.()) {
+            logger.debug(`[AUTOCOMPLETE-DEBUG] Legacy handler check`, {
+              commandName: interaction.commandName,
+              focusedOption: interaction.options?.getFocused?.(true)?.name,
+              totalHandlers: allHandlers.size,
+              handlerModules: Array.from(handlersByModule.keys())
+            });
+          }
+          
           for (const h of Array.from(allHandlers)) {
             try {
               await h(interaction);
