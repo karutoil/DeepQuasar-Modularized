@@ -38,7 +38,6 @@
     "glob": "^11.0.3",
     "luxon": "^3.7.1",
     "mongodb": "^6.8.0",
-    "moonlink.js": "^4.52.2",
     "node-cron": "^3.0.3",
     "timezones-list": "^3.1.0",
     "undici": "^6.19.8",
