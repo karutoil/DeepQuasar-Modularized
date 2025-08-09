@@ -12,22 +12,22 @@
 import { setUserTimezone, getUserTimezone } from "../services/timezoneService.js";
 import ct from 'countries-and-timezones';
 
-console.log("[TIMEZONE] Module loaded, ct library:", typeof ct);
+/* console.log("[TIMEZONE] Module loaded, ct library:", typeof ct); */
 
 export function setup(ctx) {
-  console.log("[/timezone setup] === TIMEZONE COMMAND SETUP START ===");
+/*   console.log("[/timezone setup] === TIMEZONE COMMAND SETUP START ===");
   console.log("[/timezone setup] Context available:", {
     hasV2: !!ctx.v2,
     hasCreateInteractionCommand: !!ctx.v2?.createInteractionCommand,
     hasLogger: !!ctx.logger,
     moduleName: "reminders"
-  });
+  }); */
 
   const builder = ctx.v2.createInteractionCommand()
     .setName("timezone")
     .setDescription("Set or view your timezone")
     .addStringOption(opt => {
-      console.log("[/timezone setup] Adding string option 'timezone' with autocomplete=true");
+      //console.log("[/timezone setup] Adding string option 'timezone' with autocomplete=true");
       return opt
         .setName("timezone")
         .setDescription("Your timezone (e.g. America/New_York)")
@@ -96,17 +96,17 @@ export function setup(ctx) {
     ));
 
   builder.onAutocomplete("timezone", async (i) => {
-    console.log("[/timezone autocomplete] === AUTOCOMPLETE HANDLER START ===");
+    //console.log("[/timezone autocomplete] === AUTOCOMPLETE HANDLER START ===");
     
     try {
       // Get focused input
       const focusedRaw = i.options.getFocused(true);
       const input = (focusedRaw?.value || "").toLowerCase().trim();
-      console.log("[/timezone autocomplete] Input:", input);
+      //console.log("[/timezone autocomplete] Input:", input);
       
       // Get all timezones from countries-and-timezones library
       const allTimezones = ct.getAllTimezones();
-      console.log("[/timezone autocomplete] Total timezones available:", Object.keys(allTimezones).length);
+      //console.log("[/timezone autocomplete] Total timezones available:", Object.keys(allTimezones).length);
       
       // Popular timezone suggestions (shown when no input)
       const popularTimezones = [
@@ -170,11 +170,11 @@ export function setup(ctx) {
         });
       }
       
-      console.log("[/timezone autocomplete] Returning", suggestions.length, "suggestions");
+      //console.log("[/timezone autocomplete] Returning", suggestions.length, "suggestions");
       await i.respond(suggestions);
       
     } catch (err) {
-      console.error("[/timezone autocomplete] Error:", err?.message);
+      //console.error("[/timezone autocomplete] Error:", err?.message);
       
       // Fallback to basic options
       const fallback = [
@@ -232,16 +232,15 @@ export function setup(ctx) {
     return score;
   }
 
-  console.log("[/timezone setup] About to register autocomplete handler");
+/*   console.log("[/timezone setup] About to register autocomplete handler");
   console.log("[/timezone setup] Builder autocomplete map:", {
     hasAutocompleteMap: !!builder._autocomplete,
     autocompleteKeys: builder._autocomplete ? Array.from(builder._autocomplete.keys()) : []
-  });
+  }); */
 
-  console.log("[/timezone setup] Registering command with context");
+/*   console.log("[/timezone setup] Registering command with context"); */
   const off = builder.register(ctx, "reminders", { stateManager: ctx.v2.state });
-  console.log("[/timezone setup] Command registered, disposer created:", !!off);
-  
+/*   console.log("[/timezone setup] Command registered, disposer created:", !!off); */  
   ctx.lifecycle.addDisposable(off);
-  console.log("[/timezone setup] === TIMEZONE COMMAND SETUP COMPLETE ===");
+/*   console.log("[/timezone setup] === TIMEZONE COMMAND SETUP COMPLETE ==="); */
 }
