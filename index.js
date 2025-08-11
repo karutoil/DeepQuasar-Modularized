@@ -8,6 +8,8 @@ import { createCore } from "./core/index.js";
 import { register as registerLinecount } from "./core/commands/linecount.js";
 import { register as registerAutocompleteDebug } from "./core/commands/autocomplete-debug.js";
 
+
+
 // Global safeguard: raise max listeners on Console's underlying streams
 try {
   const stdoutEE = /** @type {any} */ (process.stdout);
@@ -194,6 +196,8 @@ async function main() {
         }
       }
     }
+
+    
   });
 
   await loadAllModules();

@@ -52,6 +52,14 @@ constructor() {
   addMentionableOption(fn) { return this.addOption((b) => b.addMentionableOption(fn)); }
   addAttachmentOption(fn) { return this.addOption((b) => b.addAttachmentOption(fn)); }
 
+  addSubcommand(fn) {
+    return this.addOption((builder) => builder.addSubcommand(fn));
+  }
+
+  addSubcommandGroup(fn) {
+    return this.addOption((builder) => builder.addSubcommandGroup(fn));
+  }
+
   onExecute(handler) { this._execute = handler; return this; }
   onButton(localName, handler) { this._buttons.set(localName, handler); return this; }
   onSelect(localName, handler) { this._selects.set(localName, handler); return this; }

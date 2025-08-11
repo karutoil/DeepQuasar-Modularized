@@ -21,7 +21,17 @@ export function createEmbed(config) {
       .setTimestamp(new Date());
 
     if (opts.title) e.setTitle(opts.title);
-    if (opts.description) e.setDescription(opts.description);
+    // Always set a non-empty description to comply with Discord API
+    // Allow passing a string directly as opts for description convenience
+    let description;
+    if (typeof opts === "string") {
+      description = opts;
+    } else if (typeof opts.description === "string" && opts.description.length > 0) {
+      description = opts.description;
+    } else {
+      description = "\u200b";
+    }
+    e.setDescription(description);
     if (opts.url) e.setURL(opts.url);
     if (opts.thumbnail) e.setThumbnail(opts.thumbnail);
     if (opts.image) e.setImage(opts.image);

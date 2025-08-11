@@ -1,0 +1,454 @@
+# Create a Module (Folder-based, wired via index.js)
+
+This guide explains how to structure a module as a folder with an index.js entry that wires handlers, services, and lifecycle concerns together. It replaces the previous single-file example. The pattern mirrors existing modules such as [modules/modlog/index.js](modules/modlog/index.js), [modules/music/index.js](modules/music/index.js), and [modules/autorole/index.js](modules/autorole/index.js).
+
+Prerequisites
+- You have a running Discord.js client and the core initialized with [createCore()](core/index.js:1).
+- You are familiar with the core module context APIs described in [docs/core_functions.md](docs/core_functions.md).
+- Node 18+ recommended.
+
+Module anatomy
+
+- Each module is a folder under modules/ and exports a default async function from index.js (the module entry point).
+- index.js wires together submodules:
+  - handlers/ for slash commands, buttons, selects, modals, and event listeners
+  - services/ for persistence, schedulers, and shared business logic
+  - utils/ for helpers (optional)
+- The entry point checks feature flags, ensures initialization (e.g., DB indexes), registers commands and interactions, sets up events and schedulers, and registers lifecycle disposables for clean unload.
+
+Example directory layout
+modules/
+  example/
+    index.js
+    handlers/
+      hello.js
+      demo.js
+      events.js
+    services/
+      settings.js
+      jobs.js
+    utils/
+      formatters.js
+    module.env.example
+    README.md
+
+Key ideas
+- index.js is thin orchestration: import handler/service factories and call them with ctx.
+- Each handler/service returns a disposer function (off/stop) or registers its own disposables via ctx.lifecycle.addDisposable.
+- Feature flags: context config can disable a module without removing code.
+- Command registration uses v2 builders or interactions service, consistent with the repository.
+
+Minimal folderized module
+
+- Goal: define /hello via a dedicated handler and wire it in index.js.
+
+modules/example/handlers/hello.js
+```js
+export function registerHelloCommand(ctx) {
+  const moduleName = "example";
+  const b = ctx.v2.createInteractionCommand()
+    .setName("hello")
+    .setDescription("Say hello")
+    .onExecute(
+      ctx.dsl.withTryCatch(
+        ctx.dsl.withDeferredReply(async (i) => {
+          const e = ctx.embed.success({ title: "Hello", description: "World" });
+          await i.editReply({ embeds: [e] });
+        })
+      )
+    );
+
+  const dispose = ctx.v2.register(b, moduleName);
+  ctx.lifecycle.addDisposable(dispose);
+  return dispose;
+}
+```
+
+modules/example/index.js
+```js
+export default async function init(ctx) {
+  const moduleName = "example";
+  const { logger, config, lifecycle } = ctx;
+
+  if (!config.isEnabled("MODULE_EXAMPLE_ENABLED", true)) {
+    logger.info("[Example] Module disabled via config.");
+    return { name: moduleName, description: "Example module (disabled)" };
+  }
+
+  // Wire handlers
+  const disposers = [];
+  try {
+    const { registerHelloCommand } = await import("./handlers/hello.js");
+    const d = registerHelloCommand(ctx);
+    if (typeof d === "function") disposers.push(d);
+  } catch (e) {
+    logger.error("[Example] Failed to register hello command", { error: e?.message });
+  }
+
+  lifecycle.addDisposable(() => {
+    for (const d of disposers) {
+      try { d?.(); } catch {}
+    }
+  });
+
+  logger.info("[Example] Module loaded.");
+  return {
+    name: moduleName,
+    description: "Minimal folderized example with a /hello command.",
+    dispose: async () => {
+      logger.info("[Example] Module unloaded.");
+      for (const d of disposers) {
+        try { d?.(); } catch {}
+      }
+    }
+  };
+}
+```
+
+Wiring multiple handlers and UI components
+
+- Each handler file should encapsulate a single command or a cohesive set of interactions, returning a disposer.
+
+modules/example/handlers/demo.js
+```js
+export function registerDemoCommand(ctx) {
+  const moduleName = "example";
+
+  const b = ctx.v2.createInteractionCommand()
+    .setName("demo")
+    .setDescription("Demonstration")
+    .addStringOption(o => o.setName("q").setDescription("Query"))
+    .onExecute(
+      ctx.dsl.withTryCatch(
+        ctx.dsl.withDeferredReply(async (i) => {
+          const pages = [
+            { title: "Page 1", description: "..." },
+            { title: "Page 2", description: "..." },
+          ];
+          const { message, dispose } = ctx.v2.ui.createPaginatedEmbed(ctx, b, moduleName, pages);
+          await i.editReply(message);
+          ctx.lifecycle.addDisposable(dispose);
+        })
+      )
+    )
+    .onButton("refresh", async (i) => {
+      await i.update({ content: "Refreshed.", components: [] });
+    })
+    .onSelect("choice", async (i) => {
+      await i.update({ content: `Selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onUserSelect("userpick", async (i) => {
+      await i.update({ content: `User selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onRoleSelect("rolepick", async (i) => {
+      await i.update({ content: `Role selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onChannelSelect("channelpick", async (i) => {
+      await i.update({ content: `Channel selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onMentionableSelect("mentionpick", async (i) => {
+      await i.update({ content: `Mentionable selected: ${i.values?.join(", ")}`, components: [] });
+    })
+    .onAutocomplete("q", async (i) => {
+      const focused = i.options.getFocused();
+      const choices = ["alpha", "beta", "gamma"].filter(x => x.startsWith(focused || ""));
+      await i.respond(choices.map(c => ({ name: c, value: c })));
+    });
+
+  const dispose = ctx.v2.register(b, moduleName);
+  ctx.lifecycle.addDisposable(dispose);
+  return dispose;
+}
+```
+
+modules/example/index.js (wiring multiple)
+```js
+export default async function init(ctx) {
+  const moduleName = "example";
+  const { logger, config, lifecycle } = ctx;
+
+  if (!config.isEnabled("MODULE_EXAMPLE_ENABLED", true)) {
+    logger.info("[Example] Module disabled via config.");
+    return { name: moduleName, description: "Example module (disabled)" };
+  }
+
+  const disposers = [];
+
+  // Register commands
+  try { const { registerHelloCommand } = await import("./handlers/hello.js"); const d = registerHelloCommand(ctx); if (typeof d === "function") disposers.push(d); } catch (e) { logger.error("[Example] hello failed", { error: e?.message }); }
+  try { const { registerDemoCommand } = await import("./handlers/demo.js"); const d = registerDemoCommand(ctx); if (typeof d === "function") disposers.push(d); } catch (e) { logger.error("[Example] demo failed", { error: e?.message }); }
+
+  lifecycle.addDisposable(() => {
+    for (const d of disposers) { try { d?.(); } catch {} }
+  });
+
+  logger.info("[Example] Module loaded.");
+  return {
+    name: moduleName,
+    description: "Example with multiple commands and UI handlers.",
+    dispose: async () => {
+      logger.info("[Example] Module unloaded.");
+      for (const d of disposers) { try { d?.(); } catch {} }
+    }
+  };
+}
+```
+
+Client events with tracked cleanup
+
+- Use a dedicated handler file to attach events via ctx.events and return a disposer.
+
+modules/example/handlers/events.js
+```js
+export function registerClientEvents(ctx) {
+  const moduleName = "example";
+
+  const offReady = ctx.events.once(moduleName, "ready", () => {
+    ctx.logger.info("[Example] Ready");
+  });
+
+  const offMsgCreate = ctx.events.on(moduleName, "messageCreate", async (msg) => {
+    if (msg.content === "!ping") await msg.reply("Pong");
+  });
+
+  // Aggregate disposer
+  const dispose = () => {
+    try { offReady?.(); } catch {}
+    try { offMsgCreate?.(); } catch {}
+  };
+
+  ctx.lifecycle.addDisposable(dispose);
+  return dispose;
+}
+```
+
+Background jobs and services
+
+- Put recurring tasks, DB access, and shared logic in services/.
+
+modules/example/services/jobs.js
+```js
+export function startFiveMinuteJob(ctx) {
+  const stop = ctx.scheduler.schedule("*/5 * * * *", async () => {
+    ctx.logger.info("[Example] 5-minute job ran");
+  }, { immediate: true });
+
+  ctx.lifecycle.addDisposable(stop);
+  return stop;
+}
+```
+
+modules/example/services/settings.js
+```js
+export async function ensureIndexes(ctx) {
+  // Example: setup collection indexes
+  const db = await ctx.mongo.getDb();
+  await db.collection("example_settings").createIndex({ guildId: 1 }, { unique: true });
+}
+```
+
+modules/example/index.js (wiring services and events)
+```js
+export default async function init(ctx) {
+  const moduleName = "example";
+  const { logger, config, lifecycle } = ctx;
+
+  if (!config.isEnabled("MODULE_EXAMPLE_ENABLED", true)) {
+    logger.info("[Example] Module disabled via config.");
+    return { name: moduleName, description: "Example module (disabled)" };
+  }
+
+  const disposers = [];
+
+  // Ensure DB indexes
+  try { const { ensureIndexes } = await import("./services/settings.js"); await ensureIndexes(ctx); } catch (e) { logger.warn("[Example] ensureIndexes failed", { error: e?.message }); }
+
+  // Register commands
+  try { const { registerHelloCommand } = await import("./handlers/hello.js"); const d = registerHelloCommand(ctx); if (typeof d === "function") disposers.push(d); } catch (e) { logger.error("[Example] hello failed", { error: e?.message }); }
+
+  // Register events
+  try { const { registerClientEvents } = await import("./handlers/events.js"); const d = registerClientEvents(ctx); if (typeof d === "function") disposers.push(d); } catch (e) { logger.error("[Example] events failed", { error: e?.message }); }
+
+  // Start scheduler jobs
+  try { const { startFiveMinuteJob } = await import("./services/jobs.js"); const stop = startFiveMinuteJob(ctx); if (typeof stop === "function") disposers.push(stop); } catch (e) { logger.error("[Example] jobs failed", { error: e?.message }); }
+
+  lifecycle.addDisposable(() => { for (const d of disposers) { try { d?.(); } catch {} } });
+
+  logger.info("[Example] Module loaded.");
+  return {
+    name: moduleName,
+    description: "Example module with services, events, and scheduled jobs.",
+    dispose: async () => {
+      logger.info("[Example] Module unloaded.");
+      for (const d of disposers) { try { d?.(); } catch {} }
+    }
+  };
+}
+```
+
+Permissions, rates, preconditions
+
+- Apply DSL wrappers and permission checks inside each handler file for separation of concerns, similar to the single-file examples, but isolated per handler.
+
+HTTP calls with retries and timeouts
+
+- Use ctx.http inside handlers/services; ensure error handling is local to the file to keep index.js focused on wiring.
+
+Command registration patterns
+
+- v2 builder path (recommended for slash commands and select menus):
+  - Build with ctx.v2.createInteractionCommand()
+  - Use builder helpers for select menus:
+    - .onSelect("choice", handler)
+    - .onUserSelect("userpick", handler)
+    - .onRoleSelect("rolepick", handler)
+    - .onChannelSelect("channelpick", handler)
+    - .onMentionableSelect("mentionpick", handler)
+  - Register via ctx.v2.register(builder, moduleName)
+  - Capture returned disposer and add to ctx.lifecycle
+- interactions service path (for buttons/selects with customId prefixes):
+  - Use ctx.interactions.registerButton(moduleName, "prefix:", handler, { prefix: true })
+  - Use ctx.interactions.registerSelect(moduleName, "prefix:", handler, { prefix: true }) for custom select menus
+  - Store disposer or add to lifecycle immediately
+
+See [modules/modlog/index.js](modules/modlog/index.js) for a complete example using a single top-level command with subcommands and autocomplete wired to separate handlers.
+
+Deploying commands to Discord
+
+- Commands register into a registry; deploy at startup or when modules load:
+  - Guild install: ctx.commands.installGuild(guildId)
+  - Global install: ctx.commands.installGlobal()
+- Configuration (via env, see [core/config.js](core/config.js)):
+  - COMMAND_DEPLOY_STRATEGY: bulk | diff | auto (default bulk)
+  - COMMANDS_DRY_RUN: true/false
+
+Example startup integration (root index.js)
+```js
+import { Client, GatewayIntentBits } from "discord.js";
+import { createCore } from "./core/index.js";
+import Example from "./modules/example/index.js";
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+});
+const core = createCore(client);
+
+client.once("ready", async () => {
+  const ctx = core; // Repository modules accept the core context directly
+  await Example(ctx);
+
+  // Deploy commands
+  const guildId = process.env.GUILD_ID;
+  if (guildId) await ctx.commands.installGuild(guildId);
+  else await ctx.commands.installGlobal();
+
+  ctx.logger.info("[Startup] Example module installed");
+});
+
+client.login(process.env.DISCORD_TOKEN);
+```
+
+### Module Initialization and Bot Readiness
+
+Modules are designed to be loaded and initialized once the Discord client is ready. This ensures that all necessary Discord API connections are established and the bot is fully operational before your module attempts to register commands, set up event listeners, or interact with Discord resources.
+
+**Example (from root `index.js`):**
+
+```js
+import { Client, GatewayIntentBits } from "discord.js";
+import { createCore } from "./core/index.js";
+import MyModule from "./modules/my-module/index.js"; // Your module's entry point
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+});
+const core = createCore(client);
+
+client.once("ready", async () => {
+  const ctx = core; // The core context is passed to your module
+
+  // Initialize your module after the bot is ready
+  await MyModule(ctx);
+
+  // Perform other actions that require the bot to be ready, e.g., deploying commands
+  const guildId = process.env.GUILD_ID;
+  if (guildId) await ctx.commands.installGuild(guildId);
+  else await ctx.commands.installGlobal();
+
+  ctx.logger.info("[Startup] MyModule installed and bot is ready.");
+});
+
+client.login(process.env.DISCORD_TOKEN);
+```
+
+By calling `await MyModule(ctx);` inside the `client.once("ready", ...)` block, you guarantee that any setup, command registration, or event listener attachment within your module's `init` function (and subsequently, its handlers and services) only occurs after the bot has successfully connected to Discord.
+
+Loading and unloading modules
+
+- Loading
+  - Create or use the core context (many modules in this repo accept core context directly).
+  - Call the module’s default export; it registers commands, interactions, events.
+  - Add disposers to ctx.lifecycle to ensure clean unloads.
+- Unloading (hot-reload or shutdown)
+  - Call the returned dispose function from the module or use ctx.lifecycle.disposeAll().
+  - If you used ctx.interactions with module scoping, you can call ctx.interactions.removeModule("moduleName") for safety.
+  - v2.register returns a disposer; store it or register in lifecycle immediately.
+
+Common pattern
+```js
+export default async function init(ctx) {
+  const moduleName = "my-module";
+  const { lifecycle, logger } = ctx;
+
+  const disposers = [];
+
+  // Commands
+  // const disposeCmd = ctx.v2.register(builder, moduleName);
+  // disposers.push(disposeCmd);
+
+  // Events
+  // const disposeEvt = ctx.events.on(moduleName, "guildCreate", (g) => logger.info(`Joined guild ${g.id}`));
+  // disposers.push(disposeEvt);
+
+  // Schedule
+  // const stopJob = ctx.scheduler.schedule("0 * * * *", async () => { /* hourly */ });
+  // disposers.push(stopJob);
+
+  lifecycle.addDisposable(() => {
+    for (const d of disposers) { try { d?.(); } catch {} }
+  });
+
+  return {
+    name: moduleName,
+    description: "My module.",
+    dispose: async () => {
+      for (const d of disposers) { try { d?.(); } catch {} }
+    }
+  };
+}
+```
+
+Scaffolding a new folder-based module
+
+If available, use [bin/scaffold-module.js](bin/scaffold-module.js) to bootstrap a module folder with index.js, handlers/, and services/. Otherwise:
+
+- Create modules/your-module/index.js and export a default async function that wires handlers/services.
+- Place commands in modules/your-module/handlers/*.js exporting registerXxx(ctx) functions that call ctx.v2.register or ctx.interactions.registerX.
+- Place persistence, schedulers, and shared logic in modules/your-module/services/*.js exporting ensureIndexes/startXxx(ctx).
+- In your app startup, import the module and call it with the core context.
+
+Troubleshooting tips
+
+- Component handler not firing? Ensure customId and prefix scoping match. v2 builder helpers and UI helpers scope IDs automatically by module and command.
+- Select menu parity: user, role, channel, and mentionable select IDs are mapped and scoped internally; ensure you use the correct builder helper (e.g., .onUserSelect, .onRoleSelect, etc.) or registration method for your select menu type.
+- Command changes not appearing?
+  - Global installs can take up to 1 hour to propagate.
+  - Use COMMANDS_DRY_RUN or set deploy strategy to "diff" for diagnostics.
+- Always add disposers (off/stop) to ctx.lifecycle to guarantee clean unloads.
+
+References in this repository
+
+- Folder-wired, single-command with subcommands and autocomplete: [modules/modlog/index.js](modules/modlog/index.js)
+- Folder-wired, multiple commands and events with services: [modules/music/index.js](modules/music/index.js)
+- Folder-wired, DB indexes, events, and timers: [modules/autorole/index.js](modules/autorole/index.js)
+- Complex module with many handlers and services: [modules/tickets/index.js](modules/tickets/index.js)
