@@ -339,6 +339,30 @@ t.start();
 await doWork();
 const ms = t.stop(true);
 
+### Encryption
+
+`crypto` in `core/crypto.js`
+
+- `ctx.crypto.encrypt(text)`
+  - What: Encrypts a given string using AES-256-GCM.
+  - How: `const encryptedData = ctx.crypto.encrypt("my secret data");`
+  - Why: Securely store sensitive data in the database or other persistent storage.
+- `ctx.crypto.decrypt(encryptedText)`
+  - What: Decrypts a previously encrypted string.
+  - How: `const decryptedData = ctx.crypto.decrypt(encryptedData);`
+  - Why: Retrieve and use sensitive data that was encrypted.
+
+Example:
+
+```javascript
+const sensitiveData = "This is a secret message.";
+const encrypted = ctx.crypto.encrypt(sensitiveData);
+console.log("Encrypted:", encrypted);
+
+const decrypted = ctx.crypto.decrypt(encrypted);
+console.log("Decrypted:", decrypted);
+```
+
 
 
 Guild Config

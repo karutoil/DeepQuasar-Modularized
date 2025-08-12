@@ -16,6 +16,7 @@ import { createMongo } from "./mongo.js";
 import { createStateManager } from "./state.js";
 import { createInteractionCommand, InteractionCommandBuilder, createBuilderRegistry } from "./builders.js";
 import { createPaginatedEmbed, createConfirmationDialog, createMultiSelectMenu } from "./ui.js";
+import * as crypto from './crypto.js';
 // New services
 import { createI18n } from "./i18n.js";
 import { createGuildConfig } from "./guildConfig.js";
@@ -164,6 +165,7 @@ export function createCore(client, baseLoggerLevel = "info") {
         createConfirmationDialog,
         createMultiSelectMenu,
       },
+      crypto,
     },
     createModuleContext(moduleName) {
       const log = childLogger(logger, moduleName);
