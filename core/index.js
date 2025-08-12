@@ -199,6 +199,7 @@ export function createCore(client, baseLoggerLevel = "info") {
         i18n,
         guildConfig,
         errorReporter,
+        crypto, // Added crypto module to the context
         // v2 in module context for easy access
         v2: {
           state,
