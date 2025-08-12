@@ -120,6 +120,7 @@ async function main() {
     moduleStates.set(moduleName, record);
 
     try {
+      modLogger.info(`Attempting to load module: ${moduleName} from ${dirPath}`);
       const mod = await importModuleEntry(dirPath, moduleName, modLogger);
       const init = mod?.default;
       if (typeof init !== "function") {

@@ -369,7 +369,7 @@ Error Reporting
 
 createErrorReporter({ config, logger }) in core/reporting.js
 - ctx.errorReporter.report(error, context?)
-  - Logs locally and optionally forwards to Sentry if configured via env (SENTRY_DSN, etc.)
+  - Logs locally, which are then forwarded to Grafana Loki if configured.
 
 Why: Centralized error capture with contextual metadata.
 

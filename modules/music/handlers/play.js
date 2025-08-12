@@ -1,241 +1,119 @@
+import { ApplicationCommandOptionType, ChannelType } from "discord.js";
+import { getGuildMusicSettings } from "../services/settings.js";
 
-import { ApplicationCommandOptionType } from 'discord.js';
-
-/**
- * Starts playing a track or adds it to the queue.
- * @param {object} ctx - The module context.
- * @param {import('shoukaku').Shoukaku} shoukaku - The Shoukaku instance.
- * @param {import('../services/queueManager').QueueManager} queueManager - The queue manager.
- */
-export function registerPlayCommand(ctx, shoukaku, queueManager) {
-  const {
-    dsl,
-    embed,
-    v2: { createInteractionCommand, register }
-  } = ctx;
-
-  const command = createInteractionCommand()
-    .setName('play')
-    .setDescription('Play a song from YouTube, Spotify, or other sources.')
-    .addStringOption(option =>
-      option.setName('query')
-        .setDescription('A search query or URL.')
-        .setRequired(true)
-        .setAutocomplete(true)
-    )
-    .onExecute(
-      dsl.withTryCatch(async (interaction) => {
-        const { shoukaku } = ctx.music;
-        if (!shoukaku || ![...shoukaku.nodes.values()].some(node => node.state === 2)) {
-                        return interaction.reply({ embeds: [ctx.embed.base(0xFF0000, { description: 'The music system is not connected to a voice server yet. Please try again in a moment.' })], ephemeral: true });
-        }
-
-        await interaction.deferReply();
-
-        const { guild, member, channel } = interaction;
-        const query = interaction.options.getString('query');
-        ctx.logger.debug(`[Music] Play command received query: ${query}`);
-
-        // Prepend ytsearch: if it's not a URL
-        const isUrl = /^https?:\/\//.test(query);
-        const finalQuery = isUrl ? query : `ytsearch:${query}`;
-        ctx.logger.debug(`[Music] Final query sent to Lavalink: ${finalQuery}`);
-
-        // Precondition: User must be in a voice channel
-        if (!member.voice.channel) {
-          const errorEmbed = embed.error('You must be in a voice channel to use this command.');
-          return interaction.editReply({ embeds: [errorEmbed] });
-        }
-
-        // Join voice channel and get player, but only if not already connected
-        let player;
-        if (shoukaku.connections.has(guild.id)) {
-          ctx.logger.debug(`[Music] Guild ${guild.id} already has a connection, reusing existing player.`);
-          player = shoukaku.players.get(guild.id);
-        } else {
-          player = await shoukaku.joinVoiceChannel({
-            guildId: guild.id,
-            channelId: member.voice.channel.id,
-            shardId: guild.shardId,
-            deaf: true,
-          });
-          // Add a small delay to ensure player is fully ready after joining voice channel
-          await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
-        }
-
-        // Search for tracks
-        const result = await player.node.rest.resolve(finalQuery);
-/*         ctx.logger.debug(`[Music] Lavalink resolve result for query '${finalQuery}':`, { result }); */
-
-        if (!result || (typeof result === 'object' && !result.loadType && !result.result)) {
-            const errorEmbed = ctx.embed.base(0xFF0000, { description: 'Lavalink did not return a valid response or an unexpected response format.' });
-            return interaction.editReply({ embeds: [errorEmbed] });
-        }
-
-        const lavalinkResult = result.result || result;
-
-        if (lavalinkResult.loadType === 'error') {
-            const errorMessage = result.data?.message || 'An unknown error occurred.';
-            const errorEmbed = ctx.embed.base(0xFF0000, { description: `Lavalink encountered an error: ${errorMessage}` });
-            return interaction.editReply({ embeds: [errorEmbed] });
-        }
-
-    let tracksToQueue = [];
-    // Normalize loadType for Lavalink v4 where applicable
-    const lt = (lavalinkResult.loadType || '').toLowerCase();
-    if (lt === 'playlist' || lavalinkResult.loadType === 'PLAYLIST_LOADED') {
-      // v4: loadType 'playlist' with data.tracks; legacy: 'PLAYLIST_LOADED'
-      const tracks = lavalinkResult.data?.tracks || lavalinkResult.tracks || [];
-      tracksToQueue = tracks;
-    } else if (lt === 'search' || lavalinkResult.loadType === 'SEARCH_RESULT') {
-      // Only queue the top result for searches to avoid playing through all suggestions
-      const tracks = Array.isArray(lavalinkResult.data) ? lavalinkResult.data : (lavalinkResult.tracks || []);
-      if (tracks.length) tracksToQueue = [tracks[0]];
-    } else if (lt === 'track' || lavalinkResult.loadType === 'TRACK_LOADED') {
-      const t = lavalinkResult.data || lavalinkResult.track;
-      if (t) tracksToQueue = [t];
-    }
-
-        if (tracksToQueue.length === 0) {
-            const errorEmbed = ctx.embed.base(0xFF0000, { description: 'No tracks found for your query.' });
-            return interaction.editReply({ embeds: [errorEmbed] });
-        }
-        
-        const queue = ctx.music.queueManager.get(guild.id);
-        if (!queue.textChannelId) {
-            queue.textChannelId = channel.id;
-        }
-        const wasQueueEmpty = queue.getQueue().length === 0 && !queue.isPlaying;
-
-        // Add tracks to queue
-        queue.add(tracksToQueue, interaction.user);
-
-        // Send confirmation message
-        let responseEmbed;
-        if (lavalinkResult.loadType === 'PLAYLIST_LOADED') {
-            responseEmbed = embed.success({
-                title: 'Playlist Added',
-                description: `Added **${lavalinkResult.playlistInfo.name}** (${tracksToQueue.length} tracks) to the queue.`,
-            });
-        } else {
-            responseEmbed = embed.success({
-                title: 'Track Added',
-                description: `Added **[${tracksToQueue[0].info.title}](${tracksToQueue[0].info.uri})** to the queue.`,
-            });
-        }
-        await interaction.editReply({ embeds: [responseEmbed] });
-
-        // Start playback if queue was empty
-        if (wasQueueEmpty) {
-          playNext(ctx, guild.id, channel);
-        }
-      })
-    )
-  .onAutocomplete(async (interaction) => {
-    const query = interaction.options.getString('query');
-    if (!query) return interaction.respond([]);
-
-    const player = shoukaku.players.get(interaction.guildId);
-    if (!player) return interaction.respond([]);
-
-    const result = await player.node.rest.resolve(`ytsearch:${query}`);
-    const r = result?.result || result; // support both shapes
-    const isSearch = (r?.loadType || '').toLowerCase() === 'search';
-    const tracks = isSearch && Array.isArray(r?.data) ? r.data : (r?.tracks || []);
-    if (!tracks.length) return interaction.respond([]);
-
-    const choices = tracks.slice(0, 5).map(track => ({
-      name: track.info.title,
-      value: track.info.uri,
-    }));
-
-    await interaction.respond(choices);
-  });
-
-  return register(command, 'music');
+function formatDuration(ms) {
+  const minutes = Math.floor(ms / 60000);
+  const seconds = ((ms % 60000) / 1000).toFixed(0);
+  return minutes + ":" + (seconds < 10 ? '0' : '') + seconds;
 }
 
-/**
- * The core playback loop.
- * @param {object} ctx - The module context.
- * @param {string} guildId - The guild ID.
- * @param {import('shoukaku').Shoukaku} shoukaku - The Shoukaku instance.
- * @param {import('../services/queueManager').QueueManager} queueManager - The queue manager.
- * @param {import('discord.js').TextBasedChannel} textChannel - The channel for announcements.
- */
-export async function playNext(ctx, guildId, textChannel) {
-  const { embed, logger, music: { shoukaku, queueManager } } = ctx;
-  const queue = queueManager.get(guildId);
-  const player = shoukaku.players.get(guildId);
+export function createPlayCommand(ctx) {
+  const { v2, logger, music, embed } = ctx;
+  const { manager } = music;
 
-  if (!player || queue.getQueue().length === 0) {
-    queue.isPlaying = false;
-    if (textChannel) {
-        const queueEndEmbed = embed.info({ title: 'Queue Ended', description: 'There are no more tracks to play.' });
-        await textChannel.send({ embeds: [queueEndEmbed] });
+  const cmdPlay = v2.createInteractionCommand()
+    .setName("play")
+    .setDescription("Plays a song or adds it to the queue.")
+    .addStringOption(opt =>
+      opt.setName("query")
+        .setDescription("The song name or URL")
+        .setRequired(true)
+    )
+    .addChannelOption(opt =>
+      opt.setName("channel")
+        .setDescription("The voice channel to play in (defaults to your current voice channel)")
+        .addChannelTypes(ChannelType.GuildVoice)
+        .setRequired(false)
+    );
+
+  cmdPlay.onExecute(async (interaction) => {
+    await interaction.deferReply();
+
+    const query = interaction.options.getString("query");
+    let voiceChannel = interaction.options.getChannel("channel");
+
+    if (!voiceChannel) {
+      const member = interaction.guild.members.cache.get(interaction.user.id);
+      if (member && member.voice.channel) {
+        voiceChannel = member.voice.channel;
+      } else {
+        return interaction.editReply({ embeds: [embed.error("Please specify a voice channel or join one.")] });
+      }
     }
-    // Optional: Set a timeout to leave the voice channel after a period of inactivity
-    setTimeout(() => {
-        if (!queueManager.get(guildId)?.isPlaying) {
-            shoukaku.leaveVoiceChannel(guildId);
-            queueManager.destroy(guildId);
+
+    if (!voiceChannel.joinable) {
+      return interaction.editReply({ embeds: [embed.error("I cannot join that voice channel.")] });
+    }
+
+    try {
+      let player = manager.players.get(interaction.guild.id);
+
+    if (!player) {
+      const guildSettings = await getGuildMusicSettings(ctx, interaction.guild.id);
+      player = manager.createPlayer({
+        guildId: interaction.guild.id,
+        voiceChannelId: voiceChannel.id,
+        textId: interaction.channel.id,
+        volume: guildSettings.volume,
+        deaf: true,
+      });
+    }
+
+    if (player.state !== "CONNECTED") {
+      logger.debug(`[Music] Player not connected, attempting to connect to voice channel: ${voiceChannel.id}`);
+      await player.connect();
+      logger.debug(`[Music] Player connected to voice channel: ${voiceChannel.id}`);
+    }
+
+      const res = await player.search({ query, source: "ytsearch" }, interaction.user);
+
+      if (!res || !res.tracks.length) {
+        return interaction.editReply({ embeds: [embed.error(`No results found for 
+${query}
+.`)] });
+      }
+
+      logger.debug(`[Music] Search result loadType: ${res.loadType}`);
+      logger.debug(`[Music] Search result tracks length: ${res.tracks.length}`);
+      if (res.playlistInfo) {
+        logger.debug(`[Music] Search result playlist name: ${res.playlistInfo.name}`);
+      }
+      logger.debug(`[Music] Is loadType === "playlist"? ${res.loadType === "playlist"}`);
+
+      if (res.loadType === "playlist") {
+        player.queue.add(res.tracks);
+        logger.debug(`[Music] Full search result object: ${JSON.stringify(res)}`);
+        logger.debug(`[Music] Queue size after adding playlist tracks: ${player.queue.size}`);
+        const playlistEmbed = embed.success(`Added playlist **${res.playlist.name}** with ${res.tracks.length} songs to the queue.`);
+        playlistEmbed.setFooter({ text: `Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) });
+        await interaction.editReply({ embeds: [playlistEmbed] });
+      } else {
+        const track = res.tracks[0];
+        player.queue.add(track);
+        const songEmbed = embed.success(`Added **${track.info.title}** to the queue!`);
+        songEmbed.setDescription(`**Song:** ${track.info.title}\n**Artist:** ${track.info.author}\n**Duration:** ${formatDuration(track.info.duration)}`);
+        if (track.info.artworkUrl) {
+          songEmbed.setThumbnail(track.info.artworkUrl);
         }
-    }, 5 * 60 * 1000); // 5 minutes
-    return;
-  }
+        songEmbed.setFooter({ text: `Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) });
+        await interaction.editReply({ embeds: [songEmbed] });
+      }
 
-  queue.isPlaying = true;
-  const { track, requestedBy } = queue.next();
+      if (!player.playing && !player.paused) {
+        await player.play();
+      }
+      logger.debug(`[Music] Queue size after player.play(): ${player.queue.size}`);
+      if (player.queue.current) {
+        logger.debug(`[Music] Current track after player.play(): ${player.queue.current.info.title}`);
+      } else {
+        logger.debug(`[Music] No current track after player.play().`);
+      }
 
-  try {
-    if (!player.node || player.node.state !== 2) { // Shoukaku.NodeState.CONNECTED
-        ctx.logger.error(`[Music] Player's node in guild ${guildId} is not in CONNECTED state (${player.node?.state}). Cannot play track.`);
-        const errorEmbed = embed.error({ description: 'The music player is not connected to a Lavalink node. Please try again.' });
-        if (textChannel) {
-            await textChannel.send({ embeds: [errorEmbed] });
-        }
-        playNext(ctx, guildId, textChannel);
-        return;
+    } catch (error) {
+      logger.error(`[Music] Error playing song: ${error.message}`);
+      await interaction.editReply({ embeds: [embed.error(`An error occurred while trying to play the song: ${error.message}`)] });
     }
-    // Add a small delay to ensure player is ready
-    await new Promise(resolve => setTimeout(resolve, 500));
-  ctx.logger.debug(`[Music] Attempting to play track: ${track.encoded}`);
-  // Lavalink v4 expects an object for `track` with an `encoded` field
-  await player.playTrack({ track: { encoded: track.encoded } });
-    
-  const nowPlayingEmbed = embed.info({
-        title: 'Now Playing',
-        description: `**[${track.info.title}](${track.info.uri})**`,
-        fields: [
-            { name: 'Duration', value: new Date(track.info.length).toISOString().slice(11, 19), inline: true },
-            { name: 'Requested by', value: requestedBy.toString(), inline: true },
-        ],
-    thumbnail: `https://img.youtube.com/vi/${track.info.identifier}/0.jpg`,
-    });
+  });
 
-    if (textChannel) {
-        queue.nowPlayingMessage = await textChannel.send({ embeds: [nowPlayingEmbed] });
-    }
-
-  } catch (error) {
-  // Provide richer diagnostics without disrupting current playback
-    const extra = {
-      name: error?.name,
-      message: error?.message,
-      errors: error?.errors || error?.response?.errors,
-      status: error?.status,
-      path: error?.path,
-    };
-    logger.error(`[Music] Failed to play track in guild ${guildId}.`, extra);
-  // Avoid auto-advancing or noisy embeds on potential false positives
-  const recentStart = Date.now() - (queue?.lastStartAt || 0) < 2_000; // 2s window
-  if (textChannel && !recentStart) {
-      const detail = Array.isArray(extra.errors) && extra.errors.length
-        ? extra.errors.map(e => e?.message || e).slice(0, 1).join('; ')
-        : extra.message || 'Unknown error';
-      const errorEmbed = embed.error({ description: `Playback reported an error: ${detail}` });
-      await textChannel.send({ embeds: [errorEmbed] });
-    }
-    // Do not call playNext() here; let player events drive progression
-  }
+  return cmdPlay;
 }

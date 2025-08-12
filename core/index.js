@@ -104,7 +104,10 @@ function createUtils(logger) {
  */
 export function createCore(client, baseLoggerLevel = "info") {
   const config = createConfig();
-  const logger = createLogger(config.get("LOG_LEVEL") ?? baseLoggerLevel);
+  const logger = createLogger(config.get("LOG_LEVEL") ?? baseLoggerLevel, config);
+
+  
+
   const bus = createBus(logger);
   const commands = createCommandHandler(client, logger, config);
   const interactions = createInteractions(client, logger);

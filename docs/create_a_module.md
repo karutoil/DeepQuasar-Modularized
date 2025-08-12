@@ -163,7 +163,7 @@ Below is a summary of the key functionalities available through the `ctx` object
 - **`ctx.t()`**: The primary way to translate messages, handling module fallback and locale resolution.
 
 ### Error Reporting
-- **`ctx.errorReporter.report(error, context?)`**: Logs errors locally and optionally forwards them to Sentry if configured.
+- **`ctx.errorReporter.report(error, context?)`**: Logs errors locally, which are then forwarded to Grafana Loki if configured.
 
 ### IDs and Builders v2
 - **`ctx.v2.createInteractionCommand()` and `new ctx.v2.InteractionCommandBuilder()`**: The v2 builder for defining slash commands and co-located component handlers with scoped custom IDs.

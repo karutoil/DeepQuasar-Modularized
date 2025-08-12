@@ -69,6 +69,9 @@ export function register(core) {
       await interaction.respond(categories);
     })
     .onExecute(async (interaction) => {
+      if (interaction.options.getString("test-option") === "trigger-error") {
+        throw new Error("This is a test error from the Loki integration!");
+      }
       const testValue = interaction.options.getString("test-option");
       const category = interaction.options.getString("category");
       

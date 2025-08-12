@@ -32,3 +32,13 @@ export function normalizeError(e, fallbackCode = ErrorCodes.UNKNOWN) {
     meta: e.meta || {},
   };
 }
+/**
+ * Handles errors by normalizing and returning a standardized Result error.
+ * @param {any} error - The error to handle.
+ * @param {string} [fallbackCode=ErrorCodes.UNKNOWN] - Optional fallback error code.
+ * @returns {Result}
+ */
+export function handleError(error, fallbackCode = ErrorCodes.UNKNOWN) {
+  const { code, message, meta } = normalizeError(error, fallbackCode);
+  return Result.err(code, message, meta);
+}

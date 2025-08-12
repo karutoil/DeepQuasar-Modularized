@@ -51,13 +51,13 @@ While the current framework provides all necessary tools for interaction handlin
 
 ### 2.4. Centralized, Pluggable Error Reporting
 
-*   **Problem:** Simply logging errors to the console is insufficient for a production bot. Operators need to be able to aggregate errors and send them to monitoring services like Sentry, or to a private Discord channel.
-*   **Recommendation:** Abstract all error handling through a single, pluggable `ErrorReporter` service. The main `.env` file would configure the desired reporter (e.g., `sentry`, `discord`, `console`). All `withTryCatch` blocks and other core error handling points would use this service.
+*   **Problem:** Simply logging errors to the console is insufficient for a production bot. Operators need to be able to aggregate errors and send them to monitoring services like Grafana Loki, or to a private Discord channel.
+*   **Recommendation:** Abstract all error handling through a single, pluggable `ErrorReporter` service. The main `.env` file would configure the desired reporter (e.g., `loki`, `discord`, `console`). All `withTryCatch` blocks and other core error handling points would use this service.
 
     **Proposed `.env` Config:**
     ```ini
-    ERROR_REPORTER=sentry
-    SENTRY_DSN=...
+    ERROR_REPORTER=loki
+    LOKI_URL=...
     ```
 
 ## 3. Conclusion: A Framework Ready for Anything

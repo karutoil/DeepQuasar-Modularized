@@ -2,6 +2,49 @@
  * Minimal metrics facade (no-op by default).
  * Provides counters, gauges, and timers to standardize measurements.
  */
+/**
+ * Returns a metrics object for the given namespace.
+ * Aggregates counters and provides a snapshot of current values.
+ */
+const _metricsRegistry = new Map();
+
+export function getMetrics(namespace, logger = console) {
+  if (_metricsRegistry.has(namespace)) {
+    return _metricsRegistry.get(namespace);
+  }
+
+  // Internal storage for counters
+  const counters = new Map();
+
+  function increment(name, n = 1) {
+    if (!counters.has(name)) counters.set(name, 0);
+    counters.set(name, counters.get(name) + n);
+  }
+
+  function get(name) {
+    return counters.get(name) || 0;
+  }
+
+  function reset(name) {
+    counters.set(name, 0);
+  }
+
+  function snapshot() {
+    // Return a shallow copy of all counters
+    return Object.fromEntries(counters.entries());
+  }
+
+  const metricsObj = {
+    increment,
+    get,
+    reset,
+    snapshot,
+  };
+
+  _metricsRegistry.set(namespace, metricsObj);
+  return metricsObj;
+}
+
 export function createMetrics(logger) {
   function counter(name) {
     let value = 0;
@@ -71,4 +114,13 @@ export function createMetrics(logger) {
     gauge,
     timer,
   };
+}
+
+/*  * Reports a metric value using the provided logger.
+ * @param {string} namespace - The metric namespace.
+ * @param {string} name - The metric name.
+ * @param {number} value - The metric value.
+ * @param {object} [logger=console] - Optional logger. */
+export function reportMetric(namespace, name, value, logger = console) {
+  logger.info(`[Metric] ${namespace}.${name}: ${value}`);
 }

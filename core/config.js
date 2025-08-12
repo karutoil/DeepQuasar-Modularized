@@ -52,3 +52,4 @@ class Config {
 export function createConfig() {
   return new Config();
 }
+export default createConfig();
