@@ -76,7 +76,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (level) (count_over_time({job=~\".+\", level!=\"\"}[$__interval])) or sum by (detected_level) (count_over_time({job=~\".+\"} |~ \"(?i)(info|warn|error|debug)\" | regexp \"(?P<detected_level>(?i)(info|warn|error|debug))\" [$__interval]))",
+          "expr": "sum by (level) (count_over_time({app=~\"deepquasar|.+\"}[$__interval]))",
           "queryType": "",
           "refId": "A"
         }
@@ -138,7 +138,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (module) (count_over_time({job=~\".+\", module!=\"\"}[$__interval])) or sum by (detected_module) (count_over_time({job=~\".+\"} |~ \"module\" | regexp \"module[^a-zA-Z]*(?P<detected_module>[a-zA-Z0-9_-]+)\" [$__interval]))",
+          "expr": "sum by (module) (count_over_time({app=~\"deepquasar|.+\", module!=\"\"}[$__interval]))",
           "queryType": "",
           "refId": "A"
         }
@@ -201,7 +201,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum(rate({job=~\".+\", level=\"error\"}[5m]))",
+          "expr": "sum(rate({app=~\"deepquasar|.+\", level=\"error\"}[5m]))",
           "queryType": "",
           "refId": "A"
         }
@@ -269,7 +269,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "avg_over_time(({job=~\".+\"} |= \"Performance Metric\" | json | unwrap duration)[$__interval]) or avg_over_time(({job=~\".+\"} |~ \"duration.+[0-9]+\" | regexp \"duration[^0-9]*(?P<duration>[0-9]+)\" | unwrap duration)[$__interval])",
+          "expr": "avg_over_time(({app=~\"deepquasar|.+\"} |= \"Performance Metric\" | json | unwrap duration)[$__interval]) or avg_over_time(({app=~\"deepquasar|.+\"} |~ \"duration.+[0-9]+\" | regexp \"duration[^0-9]*(?P<duration>[0-9]+)\" | unwrap duration)[$__interval])",
           "queryType": "",
           "refId": "A"
         }
@@ -328,7 +328,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum(rate({job=~\".+\"}[5m]))",
+          "expr": "sum(rate({app=~\"deepquasar|.+\"}[5m]))",
           "queryType": "",
           "refId": "A"
         }
@@ -387,7 +387,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "count by () (count by (module) (count_over_time({job=~\".+\", module!=\"\"}[$__interval]))) or count by () (count by (service) (count_over_time({job=~\".+\"}[$__interval])))",
+          "expr": "count by () (count by (module) (count_over_time({app=~\"deepquasar|.+\", module!=\"\"}[$__interval]))) or count by () (count by (service) (count_over_time({app=~\"deepquasar|.+\"}[$__interval])))",
           "queryType": "",
           "refId": "A"
         }
@@ -480,7 +480,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (level) (rate({job=~\".+\", level!=\"\"}[5m])) or sum by (detected_level) (rate({job=~\".+\"} |~ \"(?i)(info|warn|error|debug)\" | regexp \"(?P<detected_level>(?i)(info|warn|error|debug))\" [5m]))",
+          "expr": "sum by (level) (rate({app=~\"deepquasar|.+\"}[5m]))",
           "queryType": "",
           "refId": "A"
         }
@@ -573,7 +573,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (module) (rate({job=~\".+\", module!=\"\"}[5m])) or sum by (detected_module) (rate({job=~\".+\"} |~ \"module\" | regexp \"module[^a-zA-Z]*(?P<detected_module>[a-zA-Z0-9_-]+)\" [5m]))",
+          "expr": "sum by (module) (rate({app=~\"deepquasar|.+\", module!=\"\"}[5m]))",
           "queryType": "",
           "refId": "A"
         }
@@ -666,7 +666,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate({job=~\".+\"} |= \"Performance Metric\" | json | unwrap duration | histogram_over_time(5m))))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate({app=~\"deepquasar|.+\"} |= \"Performance Metric\" | json | unwrap duration | histogram_over_time(5m))))",
           "legendFormat": "95th percentile",
           "queryType": "",
           "refId": "A"
@@ -677,7 +677,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (le) (rate({job=~\".+\"} |= \"Performance Metric\" | json | unwrap duration | histogram_over_time(5m))))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate({app=~\"deepquasar|.+\"} |= \"Performance Metric\" | json | unwrap duration | histogram_over_time(5m))))",
           "legendFormat": "50th percentile",
           "queryType": "",
           "refId": "B"
@@ -688,7 +688,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "avg_over_time(({job=~\".+\"} |= \"Performance Metric\" | json | unwrap duration)[5m])",
+          "expr": "avg_over_time(({app=~\"deepquasar|.+\"} |= \"Performance Metric\" | json | unwrap duration)[5m])",
           "legendFormat": "Average",
           "queryType": "",
           "refId": "C"
@@ -782,7 +782,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (error_type) (rate({job=~\".+\", level=\"error\", error_type!=\"\"}[5m])) or sum by (detected_error) (rate({job=~\".+\"} |~ \"(?i)error\" | regexp \"(?P<detected_error>[A-Z][a-zA-Z]*Error)\" [5m]))",
+          "expr": "sum by (error_type) (rate({app=~\"deepquasar|.+\", level=\"error\"}[5m]))",
           "queryType": "",
           "refId": "A"
         }
@@ -875,7 +875,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (guild_id) (rate({job=~\".+\", guild_id!=\"\"}[5m])) or sum by (detected_guild) (rate({job=~\".+\"} |~ \"guild\" | regexp \"guild[^0-9]*(?P<detected_guild>[0-9]+)\" [5m]))",
+          "expr": "sum by (guild_id) (rate({app=~\"deepquasar|.+\", guild_id!=\"\"}[5m]))",
           "queryType": "",
           "refId": "A"
         }
@@ -968,7 +968,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (service_version) (rate({job=~\".+\"}[5m]))",
+          "expr": "sum by (service_version) (rate({app=~\"deepquasar|.+\"}[5m]))",
           "queryType": "",
           "refId": "A"
         }
@@ -1005,7 +1005,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "{job=~\".+\"}",
+          "expr": "{app=~\"deepquasar|.+\"}",
           "queryType": "",
           "refId": "A"
         }
@@ -1071,7 +1071,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (error_type) (count_over_time({job=~\".+\", level=\"error\", error_type!=\"\"}[$__interval]))) or topk(10, sum by (detected_error) (count_over_time({job=~\".+\"} |~ \"(?i)error\" | regexp \"(?P<detected_error>[A-Z][a-zA-Z]*Error)\" [$__interval])))",
+          "expr": "topk(10, sum by (error_type) (count_over_time({app=~\"deepquasar|.+\", level=\"error\", error_type!=\"\"}[$__interval])))",
           "queryType": "",
           "refId": "A"
         }
@@ -1137,7 +1137,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (user_id) (count_over_time({job=~\".+\", user_id!=\"\"}[$__interval]))) or topk(10, sum by (detected_user) (count_over_time({job=~\".+\"} |~ \"user\" | regexp \"user[^0-9]*(?P<detected_user>[0-9]+)\" [$__interval])))",
+          "expr": "topk(10, sum by (user_id) (count_over_time({app=~\"deepquasar|.+\", user_id!=\"\"}[$__interval])))",
           "queryType": "",
           "refId": "A"
         }
@@ -1189,14 +1189,14 @@
           "type": "loki",
           "uid": "${DS_LOKI}"
         },
-        "definition": "label_values({job=~\".+\"}, environment)",
+        "definition": "label_values({app=~\"deepquasar|.+\"}, environment)",
         "hide": 0,
         "includeAll": true,
         "label": "Environment",
         "multi": true,
         "name": "environment",
         "options": [],
-        "query": "label_values({job=~\".+\"}, environment)",
+        "query": "label_values({app=~\"deepquasar|.+\"}, environment)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -1217,14 +1217,14 @@
           "type": "loki",
           "uid": "${DS_LOKI}"
         },
-        "definition": "label_values({job=~\".+\"}, module)",
+        "definition": "label_values({app=~\"deepquasar|.+\"}, module)",
         "hide": 0,
         "includeAll": true,
         "label": "Module",
         "multi": true,
         "name": "module",
         "options": [],
-        "query": "label_values({job=~\".+\"}, module)",
+        "query": "label_values({app=~\"deepquasar|.+\"}, module)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -1245,14 +1245,14 @@
           "type": "loki",
           "uid": "${DS_LOKI}"
         },
-        "definition": "label_values({job=~\".+\"}, level)",
+        "definition": "label_values({app=~\"deepquasar|.+\"}, level)",
         "hide": 0,
         "includeAll": true,
         "label": "Log Level",
         "multi": true,
         "name": "log_level",
         "options": [],
-        "query": "label_values({job=~\".+\"}, level)",
+        "query": "label_values({app=~\"deepquasar|.+\"}, level)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,

@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import chokidar from "chokidar";
 import { createCore } from "./core/index.js";
+import { initStatusCycler } from "./core/statusCycler.js";
 import { register as registerLinecount } from "./core/commands/linecount.js";
 import { register as registerAutocompleteDebug } from "./core/commands/autocomplete-debug.js";
 
@@ -69,13 +70,136 @@ async function main() {
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
-      GatewayIntentBits.GuildVoiceStates
+      GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.GuildPresences
     ],
     partials: [Partials.GuildMember, Partials.Message, Partials.Channel]
   });
 
   const core = createCore(client);
   const { logger, config, commands, interactions, events } = core;
+
+  // --- Shutdown Logic ---
+  let isShuttingDown = false;
+  let shutdownTimeout;
+  let statusCyclerStop = null; // Will be set after initStatusCycler
+  const SHUTDOWN_TIMEOUT_MS = 15000;
+
+  async function shutdown(reason = "unknown") {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    logger.info(`[Shutdown] Initiating shutdown: ${reason}`);
+
+    // Set a timeout to force exit if hanging
+    shutdownTimeout = setTimeout(() => {
+      logger.error("[Shutdown] Timeout reached, forcing exit.");
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+
+    // Steps to cleanup
+    const cleanupSteps = [];
+
+    // 1. Stop status cycler
+    cleanupSteps.push((async () => {
+      try {
+        if (typeof statusCyclerStop === "function") {
+          await statusCyclerStop();
+          logger.info("[Shutdown] Status cycler stopped.");
+        }
+      } catch (e) {
+        logger.error(`[Shutdown] Error stopping status cycler: ${e?.message}`, { stack: e?.stack });
+      }
+    })());
+
+    // 2. Stop file watcher
+    cleanupSteps.push((async () => {
+      try {
+        if (watcher) {
+          await watcher.close();
+          logger.info("[Shutdown] File watcher stopped.");
+        }
+      } catch (e) {
+        logger.error(`[Shutdown] Error stopping file watcher: ${e?.message}`, { stack: e?.stack });
+      }
+    })());
+
+    // 3. Clear debounced intervals
+    cleanupSteps.push((async () => {
+      try {
+        for (const id of debouncers.values()) {
+          clearTimeout(id);
+        }
+        debouncers.clear();
+        logger.info("[Shutdown] Debounced intervals cleared.");
+      } catch (e) {
+        logger.error(`[Shutdown] Error clearing debouncers: ${e?.message}`, { stack: e?.stack });
+      }
+    })());
+
+    // 4. Unload all modules (calls dispose if present)
+    cleanupSteps.push((async () => {
+      try {
+        const unloads = [];
+        for (const name of moduleStates.keys()) {
+          unloads.push(unloadModule(name));
+        }
+        await Promise.allSettled(unloads);
+        logger.info("[Shutdown] All modules unloaded.");
+      } catch (e) {
+        logger.error(`[Shutdown] Error unloading modules: ${e?.message}`, { stack: e?.stack });
+      }
+    })());
+
+    // 5. Close database connections (if present)
+    cleanupSteps.push((async () => {
+      try {
+        if (core.mongo?.disconnect) {
+          await core.mongo.disconnect();
+          logger.info("[Shutdown] MongoDB disconnected.");
+        }
+      } catch (e) {
+        logger.error(`[Shutdown] Error disconnecting MongoDB: ${e?.message}`, { stack: e?.stack });
+      }
+    })());
+
+    // 6. Disconnect Discord client
+    cleanupSteps.push((async () => {
+      try {
+        await client.destroy();
+        logger.info("[Shutdown] Discord client disconnected.");
+      } catch (e) {
+        logger.error(`[Shutdown] Error disconnecting Discord client: ${e?.message}`, { stack: e?.stack });
+      }
+    })());
+
+    // 7. Shutdown other external services (if present)
+    cleanupSteps.push((async () => {
+      try {
+        if (core.shutdownExternalServices) {
+          await core.shutdownExternalServices();
+          logger.info("[Shutdown] External services shut down.");
+        }
+      } catch (e) {
+        logger.error(`[Shutdown] Error shutting down external services: ${e?.message}`, { stack: e?.stack });
+      }
+    })());
+
+    // Wait for all cleanup steps to finish
+    await Promise.allSettled(cleanupSteps);
+
+    clearTimeout(shutdownTimeout);
+    logger.info("[Shutdown] Cleanup complete. Exiting.");
+    process.exit(0);
+  }
+
+  // Signal handlers
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("uncaughtException", (err) => {
+    logger.error(`[Shutdown] Uncaught exception: ${err?.message}`, { stack: err?.stack });
+    shutdown("uncaughtException");
+  });
+  // --- End Shutdown Logic ---
 
   // Register core-utility commands (e.g., /linecount) before installing commands
   try {
@@ -198,7 +322,10 @@ async function main() {
       }
     }
 
-    
+    // Start status cycler after bot is ready
+    // Save the stop function for shutdown
+    // initStatusCycler returns an object with stop() method
+    statusCyclerStop = initStatusCycler(client, { moduleStates }).stop;
   });
 
   await loadAllModules();

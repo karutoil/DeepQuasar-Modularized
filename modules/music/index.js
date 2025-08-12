@@ -53,30 +53,30 @@ export default async function init(ctx) {
     },
     autoSkip: true,
     playerOptions: {
-        applyVolumeAsFilter: false,
-        clientBasedPositionUpdateInterval: 50,
-        defaultSearchPlatform: "ytsearch",
-        volumeDecrementer: 0.75,
-        onDisconnect: {
-            autoReconnect: true,
-            destroyPlayer: false
-        },
-        onEmptyQueue: {
-            destroyAfterMs: 30_000,
-        },
-        useUnresolvedData: true,
+      applyVolumeAsFilter: false,
+      clientBasedPositionUpdateInterval: 50,
+      defaultSearchPlatform: "ytsearch",
+      volumeDecrementer: 0.75,
+      onDisconnect: {
+        autoReconnect: true,
+        destroyPlayer: false
+      },
+      onEmptyQueue: {
+        destroyAfterMs: 30_000,
+      },
+      useUnresolvedData: true,
     },
     advancedOptions: {
-        enableDebugEvents: true,
-        maxFilterFixDuration: 600_000, // only allow instafixfilterupdate for tracks sub 10mins
-        debugOptions: {
-            noAudio: false,
-            playerDestroy: {
-                dontThrowError: false,
-                debugLog: false,
-            },
-            logCustomSearches: false,
-        }
+      enableDebugEvents: true,
+      maxFilterFixDuration: 600_000, // only allow instafixfilterupdate for tracks sub 10mins
+      debugOptions: {
+        noAudio: false,
+        playerDestroy: {
+          dontThrowError: false,
+          debugLog: false,
+        },
+        logCustomSearches: false,
+      }
     }
   });
 
@@ -174,7 +174,7 @@ export default async function init(ctx) {
 
   lifecycle.addDisposable(() => {
     logger.info("[Music] Module unloaded.");
-    manager.destroy(); // Disconnect from Lavalink
+    manager.nodeManager.disconnectAll(false, true);
   });
 
   logger.info("[Music] Module loaded.");
@@ -194,7 +194,7 @@ export default async function init(ctx) {
       disposeVolumeCmd?.();
       disposeSeekCmd?.();
       disposeDisconnectCmd?.();
-      manager.destroy();
+      manager.nodeManager.disconnectAll(false, true);;
     }
   };
 }

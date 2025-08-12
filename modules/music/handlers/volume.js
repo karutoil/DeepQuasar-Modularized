@@ -13,7 +13,7 @@ export function createVolumeCommand(ctx) {
         .setDescription("The volume level (0-100).")
         .setRequired(false)
         .setMinValue(0)
-        .setMaxValue(100)
+        .setMaxValue(1000)
     );
 
   cmdVolume.onExecute(async (interaction) => {
