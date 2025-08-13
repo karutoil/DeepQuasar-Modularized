@@ -21,7 +21,7 @@ export default async function init(ctx) {
 
   // Builders: one top-level /modlog, with subcommands implemented as separate builders for clarity
   const cmdModlog = v2.createInteractionCommand()
-    .setName("modlog")
+    .setName("auditlog")
     .setDescription("Audit log utilities")
     .setDefaultMemberPermissions(PermissionFlagsBits.ViewAuditLog);
 

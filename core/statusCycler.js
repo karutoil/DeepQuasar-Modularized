@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as scheduler from './scheduler.js'; // Optional, fallback to setInterval if not present
+import * as logger from './logger.js';
 
 /**
  * Initializes the Discord bot status cycler.
@@ -109,7 +110,7 @@ function initStatusCycler(client, options = {}) {
         ? await def.getMessage()
         : String(def.getMessage);
     } catch (err) {
-      console.error('[StatusCycler] Error getting status message:', err);
+      logger.error('[StatusCycler] Error getting status message:', err);
       message = 'Status error';
     }
   
@@ -123,7 +124,7 @@ function initStatusCycler(client, options = {}) {
     }
   
     // Debug logging
-/*     console.log('[StatusCycler] Attempting to set activity:', activityOptions); */
+/*     logger.log('[StatusCycler] Attempting to set activity:', activityOptions); */
   
     if (client.user) {
       // Prefer v14 setPresence API
@@ -132,19 +133,19 @@ function initStatusCycler(client, options = {}) {
           // Set presence with an explicit status
           await client.user.setPresence({ activities: [activityOptions], status: 'online' });
         } catch (err) {
-          console.error('[StatusCycler] Error setting presence:', err);
+          logger.error('[StatusCycler] Error setting presence:', err);
         }
       } else if (typeof client.user.setActivity === 'function') {
         try {
           await client.user.setActivity(activityOptions);
         } catch (err) {
-          console.error('[StatusCycler] Error setting activity:', err);
+          logger.error('[StatusCycler] Error setting activity:', err);
         }
       } else {
-        console.error('[StatusCycler] client.user has no setPresence or setActivity.');
+        logger.error('[StatusCycler] client.user has no setPresence or setActivity.');
       }
     } else {
-      console.error('[StatusCycler] client.user not available.');
+      logger.error('[StatusCycler] client.user not available.');
     }
   
     currentIndex = (currentIndex + 1) % allStatusDefinitions.length;
@@ -157,8 +158,8 @@ function initStatusCycler(client, options = {}) {
     timer = setInterval(updateStatus, interval);
   }
 
-  // Initial status update
-  updateStatus();
+  // Initial status update after client is fully ready
+  client.once('ready', updateStatus);
 
   // Return a handle for future extensibility (e.g., to add/remove status messages)
   return {

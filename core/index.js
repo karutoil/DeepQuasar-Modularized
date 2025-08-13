@@ -21,6 +21,7 @@ import * as crypto from './crypto.js';
 import { createI18n } from "./i18n.js";
 import { createGuildConfig } from "./guildConfig.js";
 import { createErrorReporter } from "./reporting.js";
+import { initStatusCycler } from "./statusCycler.js";
 
 /**
  * Create lifecycle utilities that track disposables for a given module.
@@ -134,6 +135,9 @@ export function createCore(client, baseLoggerLevel = "info") {
   // DSL depends on some of the above (augment with reporter and i18n)
   const dsl = createDsl({ logger, embed, rateLimiter, permissions, errorReporter, i18n });
 
+  // Initialize status cycler
+  const statusCycler = initStatusCycler(client);
+
   return {
     client,
     logger,
@@ -154,6 +158,7 @@ export function createCore(client, baseLoggerLevel = "info") {
     i18n,
     guildConfig,
     errorReporter,
+    statusCycler, // Add statusCycler to the returned object
     // v2 surfaces
     v2: {
       state,
