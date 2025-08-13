@@ -1,4 +1,3 @@
-console.log("[DEBUG] handlers/builder.js loaded");
 /**
  * /embedbuilder interactive UI with:
  * - Live preview (ephemeral)
@@ -16,7 +15,6 @@ function sanitizeKey(str) {
     .replace(/[^a-z0-9\-_]/g, "")
     .trim();
 }
-console.log("[DEBUG] Initializing b in registerEmbedBuilder");
 export function registerEmbedBuilder(ctx) {
   const moduleName = "embedbuilder";
   const b = ctx.v2.createInteractionCommand()
