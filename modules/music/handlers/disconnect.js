@@ -9,16 +9,25 @@ export function createDisconnectCommand(ctx) {
   cmdDisconnect.onExecute(async (interaction) => {
     await interaction.deferReply();
 
+    if (!interaction.guild) return interaction.editReply({ embeds: [embed.error("This command must be used in a guild.")] });
+
     const player = manager.players.get(interaction.guild.id);
 
     if (!player || !player.connected) {
       return interaction.editReply({ embeds: [embed.info("I am not connected to a voice channel.")] });
     }
 
+    if (player._transitioning) {
+      return interaction.editReply({ embeds: [embed.info("Operation in progress, please try again shortly.")] });
+    }
+
     try {
-      player.destroy(); // Disconnects and clears the queue
+      player._transitioning = true;
+      if (typeof player.destroy === 'function') player.destroy(); // Disconnects and clears the queue
+      player._transitioning = false;
       await interaction.editReply({ embeds: [embed.success("Disconnected from voice channel and cleared the queue.")] });
     } catch (error) {
+      player._transitioning = false;
       logger.error(`[Music] Error disconnecting: ${error.message}`);
       await interaction.editReply({ embeds: [embed.error(`An error occurred while trying to disconnect: ${error.message}`)] });
     }

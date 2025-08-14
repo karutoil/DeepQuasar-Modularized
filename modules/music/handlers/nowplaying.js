@@ -9,26 +9,31 @@ export function createNowPlayingCommand(ctx) {
   cmdNowPlaying.onExecute(async (interaction) => {
     await interaction.deferReply();
 
+    if (!interaction.guild) return interaction.editReply({ embeds: [embed.error("This command must be used in a guild.")] });
+
     const player = manager.players.get(interaction.guild.id);
 
-    if (!player || !player.queue.current) {
+    if (!player || !player.queue || !player.queue.current) {
       return interaction.editReply({ embeds: [embed.error("No song is currently playing.")] });
     }
 
     const song = player.queue.current;
-    const isStream = song.info.isStream;
-    const totalDuration = isStream ? "LIVE" : formatDuration(player.queue.current.info.duration);
-    const currentPosition = isStream ? "0:00" : formatDuration(player.position);
-    const progressBar = isStream ? "[▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬]" : generateProgressBar(player.position, player.queue.current.info.duration);
+    const isStream = !!song.info?.isStream;
+    const totalDuration = isStream ? "LIVE" : formatDuration(Number(player.queue.current?.info?.duration || 0));
+    const currentPosition = isStream ? "0:00" : formatDuration(Number(player.position || 0));
+    const progressBar = isStream ? "[▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬]" : generateProgressBar(Number(player.position || 0), Number(player.queue.current?.info?.duration || 1));
 
     const nowPlayingEmbed = embed.info("Now Playing");
-    nowPlayingEmbed.setTitle(song.info.title);
-    nowPlayingEmbed.setDescription(`**Artist:** ${song.info.author}\n${progressBar} 
-[${currentPosition} / ${totalDuration}]`);
-    if (song.info.artworkUrl) {
+    nowPlayingEmbed.setTitle(song.info?.title || '<unknown title>');
+    nowPlayingEmbed.setDescription(`**Artist:** ${song.info?.author || '<unknown artist>'}\n${progressBar} \n[${currentPosition} / ${totalDuration}]`);
+    if (song.info?.artworkUrl) {
       nowPlayingEmbed.setThumbnail(song.info.artworkUrl);
     }
-    nowPlayingEmbed.setFooter({ text: `Requested by ${song.requester.tag}`, iconURL: song.requester.displayAvatarURL({ dynamic: true }) });
+    try {
+      nowPlayingEmbed.setFooter({ text: `Requested by ${song.requester?.tag || 'unknown'}`, iconURL: song.requester?.displayAvatarURL ? song.requester.displayAvatarURL({ dynamic: true }) : undefined });
+    } catch (err) {
+      // ignore footer set errors
+    }
 
     await interaction.editReply({ embeds: [nowPlayingEmbed] });
   });

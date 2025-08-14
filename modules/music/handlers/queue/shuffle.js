@@ -5,9 +5,11 @@ export function createShuffleCommand(ctx) {
   return async (interaction) => {
     await interaction.deferReply();
 
+    if (!interaction.guild) return interaction.editReply({ embeds: [embed.error("This command must be used in a guild.")] });
+
     const player = manager.players.get(interaction.guild.id);
 
-    if (!player || player.queue.tracks.length <= 1) {
+    if (!player || !player.queue || player.queue.tracks.length <= 1) {
       return interaction.editReply({ embeds: [embed.info("The queue needs at least 2 songs to shuffle.")] });
     }
 

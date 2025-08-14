@@ -61,6 +61,7 @@ export function createQueueCommand(ctx) {
 
   // Wire execution (single entry point with subcommands)
   cmdQueue.onExecute(async (interaction) => {
+    if (!interaction.guild) return interaction.reply({ embeds: [ctx.embed.error('This command must be used in a guild.')], ephemeral: true });
     const sub = interaction.options.getSubcommand();
     if (sub === "list") {
       await createListCommand(ctx, cmdQueue)(interaction); // Pass ctx, cmdQueue and interaction

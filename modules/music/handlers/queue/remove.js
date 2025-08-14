@@ -5,9 +5,11 @@ export function createRemoveCommand(ctx) {
   return async (interaction) => {
     await interaction.deferReply();
 
+    if (!interaction.guild) return interaction.editReply({ embeds: [embed.error("This command must be used in a guild.")] });
+
     const player = manager.players.get(interaction.guild.id);
 
-    if (!player || player.queue.tracks.length === 0) {
+    if (!player || !player.queue || player.queue.tracks.length === 0) {
       return interaction.editReply({ embeds: [embed.error("The queue is empty.")] });
     }
 

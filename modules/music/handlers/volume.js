@@ -19,6 +19,8 @@ export function createVolumeCommand(ctx) {
   cmdVolume.onExecute(async (interaction) => {
     await interaction.deferReply();
 
+    if (!interaction.guild) return interaction.editReply({ embeds: [embed.error("This command must be used in a guild.")] });
+
     const player = manager.players.get(interaction.guild.id);
 
     if (!player) {
@@ -32,11 +34,20 @@ export function createVolumeCommand(ctx) {
       return interaction.editReply({ embeds: [embed.info(`Current volume: ${player.volume}%.`)] });
     }
 
+    // Clamp level
+    const clamped = Math.max(0, Math.min(100, Number(level)));
+
     try {
-      await player.setVolume(level);
-      await setGuildMusicSettings(ctx, interaction.guild.id, { volume: level });
-      await interaction.editReply({ embeds: [embed.success(`Volume set to ${level}%.`)] });
+      if (player._transitioning) {
+        return interaction.editReply({ embeds: [embed.info("Operation in progress, please try again shortly.")] });
+      }
+      player._transitioning = true;
+      await player.setVolume(clamped);
+      await setGuildMusicSettings(ctx, interaction.guild.id, { volume: clamped });
+      player._transitioning = false;
+      await interaction.editReply({ embeds: [embed.success(`Volume set to ${clamped}%.`)] });
     } catch (error) {
+      player._transitioning = false;
       logger.error(`[Music] Error setting volume: ${error.message}`);
       await interaction.editReply({ embeds: [embed.error(`An error occurred while trying to set the volume: ${error.message}`)] });
     }

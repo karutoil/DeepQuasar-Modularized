@@ -32,9 +32,14 @@ export function createPlayCommand(ctx) {
     const query = interaction.options.getString("query");
     let voiceChannel = interaction.options.getChannel("channel");
 
+    // Precondition checks
+    if (!interaction.guild) {
+      return interaction.editReply({ embeds: [embed.error("This command must be used in a guild.")] });
+    }
+
+    const member = interaction.guild.members.cache.get(interaction.user.id);
     if (!voiceChannel) {
-      const member = interaction.guild.members.cache.get(interaction.user.id);
-      if (member && member.voice.channel) {
+      if (member && member.voice && member.voice.channel) {
         voiceChannel = member.voice.channel;
       } else {
         return interaction.editReply({ embeds: [embed.error("Please specify a voice channel or join one.")] });
@@ -42,7 +47,11 @@ export function createPlayCommand(ctx) {
     }
 
     if (!voiceChannel.joinable) {
-      return interaction.editReply({ embeds: [embed.error("I cannot join that voice channel.")] });
+      return interaction.editReply({ embeds: [embed.error("I cannot join that voice channel. Please ensure I have the CONNECT permission.")] });
+    }
+
+    if (!member) {
+      return interaction.editReply({ embeds: [embed.error("Could not fetch your member information. Try again later.")] });
     }
 
     try {
@@ -59,11 +68,17 @@ export function createPlayCommand(ctx) {
       });
     }
 
-    if (player.state !== "CONNECTED") {
-      logger.debug(`[Music] Player not connected, attempting to connect to voice channel: ${voiceChannel.id}`);
-      await player.connect();
-      logger.debug(`[Music] Player connected to voice channel: ${voiceChannel.id}`);
-    }
+      if (player.state !== "CONNECTED") {
+        logger.debug(`[Music] Player not connected, attempting to connect to voice channel: ${voiceChannel.id}`);
+        try {
+          await player.connect();
+          logger.debug(`[Music] Player connected to voice channel: ${voiceChannel.id}`);
+        } catch (err) {
+          logger.warn(`[Music] Failed to connect player to voice channel ${voiceChannel.id}: ${err.message}`);
+          return interaction.editReply({ embeds: [embed.error("Failed to join voice channel. Ensure the bot has permission and try again.")] });
+        }
+      }
+
 
       const res = await player.search({ query, source: "ytsearch" }, interaction.user);
 
