@@ -565,11 +565,11 @@ export async function registerPanelHandlers(ctx) {
 
   lifecycle.addDisposable(() => {
     for (const d of disposers) {
-      try { d?.(); } catch (e) {}
+      try { d?.(); } catch (e) { /* eslint-disable-line no-empty */ /* noop */ }
     }
   });
 
-  async function republishPanelMessage(interaction, panelId) {
+  const republishPanelMessage = async (interaction, panelId) => {
     try {
       const { getPanel, linkMessage } = await import("../services/panelService.js");
       const p = await getPanel(ctx, interaction.guildId, panelId);
@@ -638,7 +638,7 @@ export async function registerPanelHandlers(ctx) {
 
   return () => {
     for (const d of disposers) {
-      try { d?.(); } catch (e) {}
+      try { d?.(); } catch (e) { /* eslint-disable-line no-empty */ /* noop */ }
     }
   };
 }

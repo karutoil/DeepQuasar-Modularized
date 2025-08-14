@@ -3,8 +3,7 @@
 // showcasing bot and host statistics in a rich embed.
 
 import os from "node:os";
-import process from "node:process";
-import { version as nodeVersion } from "node:process";
+import process, { version as nodeVersion } from "node:process";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, time, TimestampStyles, EmbedBuilder } from "discord.js";
 
 export default async function init(ctx) {

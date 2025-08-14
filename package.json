@@ -17,7 +17,8 @@
     "dev": "node index.js",
     "start": "node index.js",
     "scaffold": "node bin/scaffold-module.js",
-    "lint": "echo \"No linter configured\"",
+    "lint": "eslint . --ext .js,.cjs,.mjs || true",
+    "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix || true",
     "prepare": "node -e \"\"",
     "clear": "node bin/clear-commands.js",
     "migrate:tempvc": "node ./bin/migrate-tempvc-v1.js"
@@ -54,7 +55,10 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "eslint": "^8.50.0",
+    "eslint-plugin-import": "^2.28.0",
+    "prettier": "^3.6.2"
   },
   "license": "MIT",
   "keywords": [
