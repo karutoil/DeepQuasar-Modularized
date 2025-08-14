@@ -1,25 +1,25 @@
 // Music Module Entry Point
-import { LavalinkManager } from "lavalink-client";
-import { createPlayCommand } from "./handlers/play.js";
-import { createSkipCommand } from "./handlers/skip.js";
-import { createStopCommand } from "./handlers/stop.js";
-import { createQueueCommand } from "./handlers/queue.js";
-import { createNowPlayingCommand } from "./handlers/nowplaying.js";
-import { createPauseCommand } from "./handlers/pause.js";
-import { createResumeCommand } from "./handlers/resume.js";
-import { createLoopCommand } from "./handlers/loop.js";
-import { createVolumeCommand } from "./handlers/volume.js";
-import { createSeekCommand } from "./handlers/seek.js";
-import { createDisconnectCommand } from "./handlers/disconnect.js";
-import { ensureIndexes } from "./services/settings.js";
+import { LavalinkManager } from 'lavalink-client';
+import { createPlayCommand } from './handlers/play.js';
+import { createSkipCommand } from './handlers/skip.js';
+import { createStopCommand } from './handlers/stop.js';
+import { createQueueCommand } from './handlers/queue.js';
+import { createNowPlayingCommand } from './handlers/nowplaying.js';
+import { createPauseCommand } from './handlers/pause.js';
+import { createResumeCommand } from './handlers/resume.js';
+import { createLoopCommand } from './handlers/loop.js';
+import { createVolumeCommand } from './handlers/volume.js';
+import { createSeekCommand } from './handlers/seek.js';
+import { createDisconnectCommand } from './handlers/disconnect.js';
+import { ensureIndexes } from './services/settings.js';
 
 export default async function init(ctx) {
   const { logger, config, lifecycle, v2 } = ctx;
-  const moduleName = "music";
+  const moduleName = 'music';
 
-  if (!config.isEnabled("MODULE_MUSIC_ENABLED", true)) {
-    logger.info("[Music] Module disabled via config.");
-    return { name: moduleName, description: "Music module (disabled)" };
+  if (!config.isEnabled('MODULE_MUSIC_ENABLED', true)) {
+    logger.info('[Music] Module disabled via config.');
+    return { name: moduleName, description: 'Music module (disabled)' };
   }
 
   // Ensure DB indexes
@@ -27,52 +27,61 @@ export default async function init(ctx) {
 
   // Initialize Lavalink Manager
   // Read and validate Lavalink config. Support single-node env vars or JSON LAVALINK_NODES
-  const lavalinkNodesRaw = config.get("LAVALINK_NODES") || "";
+  const lavalinkNodesRaw = config.get('LAVALINK_NODES') || '';
   let nodesConfig = [];
 
   if (lavalinkNodesRaw) {
     try {
       // Allow JSON array or CSV-ish fallback
-      nodesConfig = typeof lavalinkNodesRaw === 'string' ? JSON.parse(lavalinkNodesRaw) : lavalinkNodesRaw;
+      nodesConfig =
+        typeof lavalinkNodesRaw === 'string' ? JSON.parse(lavalinkNodesRaw) : lavalinkNodesRaw;
       if (!Array.isArray(nodesConfig)) nodesConfig = [];
     } catch (err) {
-      logger.warn('[Music] Could not parse LAVALINK_NODES as JSON, falling back to single-node env parsing.');
+      logger.warn(
+        '[Music] Could not parse LAVALINK_NODES as JSON, falling back to single-node env parsing.'
+      );
     }
   }
 
   // Fallback to legacy single-node env vars
   if (nodesConfig.length === 0) {
-    const lavalinkHost = config.get("LAVALINK_HOST");
-    const lavalinkPort = config.get("LAVALINK_PORT");
-    const lavalinkPassword = config.get("LAVALINK_PASSWORD");
-    const lavalinkSecure = config.get("LAVALINK_SECURE") || config.get("LAVALINK_USE_TLS") || false;
+    const lavalinkHost = config.get('LAVALINK_HOST');
+    const lavalinkPort = config.get('LAVALINK_PORT');
+    const lavalinkPassword = config.get('LAVALINK_PASSWORD');
+    const lavalinkSecure = config.get('LAVALINK_SECURE') || config.get('LAVALINK_USE_TLS') || false;
 
-    logger.debug(`[Music] Lavalink config: Host=${lavalinkHost}, Port=${lavalinkPort}, Password=${lavalinkPassword ? '***' : 'undefined'}, Secure=${!!lavalinkSecure}`);
+    logger.debug(
+      `[Music] Lavalink config: Host=${lavalinkHost}, Port=${lavalinkPort}, Password=${lavalinkPassword ? '***' : 'undefined'}, Secure=${!!lavalinkSecure}`
+    );
 
     if (!lavalinkHost || !lavalinkPort || !lavalinkPassword) {
-      logger.error("[Music] Lavalink host, port, or password not configured. Music module cannot start.");
-      return { name: moduleName, description: "Music module (error: config missing)" };
+      logger.error(
+        '[Music] Lavalink host, port, or password not configured. Music module cannot start.'
+      );
+      return { name: moduleName, description: 'Music module (error: config missing)' };
     }
 
     const portNum = Number(lavalinkPort);
     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      logger.error(`[Music] Invalid LAVALINK_PORT: ${lavalinkPort}. Must be an integer between 1 and 65535.`);
-      return { name: moduleName, description: "Music module (error: config invalid)" };
+      logger.error(
+        `[Music] Invalid LAVALINK_PORT: ${lavalinkPort}. Must be an integer between 1 and 65535.`
+      );
+      return { name: moduleName, description: 'Music module (error: config invalid)' };
     }
 
     nodesConfig = [
       {
-        id: "main",
+        id: 'main',
         host: lavalinkHost,
         port: portNum,
         password: lavalinkPassword,
         secure: !!lavalinkSecure,
-      }
+      },
     ];
   }
 
   const manager = new LavalinkManager({
-    nodes: nodesConfig.map(n => ({
+    nodes: nodesConfig.map((n) => ({
       id: n.id || `${n.host}:${n.port}`,
       host: n.host,
       port: Number(n.port),
@@ -93,7 +102,9 @@ export default async function init(ctx) {
           // Best-effort: send raw payload via WebSocket if available and supports it
           return ctx.client.ws.send(payload);
         }
-        logger.warn(`[Music] Unable to send payload to guild ${guildId}: guild not cached and no shard fallback available.`);
+        logger.warn(
+          `[Music] Unable to send payload to guild ${guildId}: guild not cached and no shard fallback available.`
+        );
       } catch (err) {
         logger.warn(`[Music] sendToShard error for guild ${guildId}: ${err.message}`);
       }
@@ -102,11 +113,11 @@ export default async function init(ctx) {
     playerOptions: {
       applyVolumeAsFilter: false,
       clientBasedPositionUpdateInterval: 50,
-      defaultSearchPlatform: "ytsearch",
+      defaultSearchPlatform: 'ytsearch',
       volumeDecrementer: 0.75,
       onDisconnect: {
         autoReconnect: true,
-        destroyPlayer: false
+        destroyPlayer: false,
       },
       onEmptyQueue: {
         destroyAfterMs: 30_000,
@@ -123,13 +134,13 @@ export default async function init(ctx) {
           debugLog: false,
         },
         logCustomSearches: false,
-      }
-    }
+      },
+    },
   });
 
-  manager.on("nodeConnect", node => logger.info(`[Music] Node "${node.id}" connected.`));
-  manager.on("nodeDisconnect", node => logger.warn(`[Music] Node "${node.id}" disconnected.`));
-  manager.on("nodeError", (node, error) => {
+  manager.on('nodeConnect', (node) => logger.info(`[Music] Node "${node.id}" connected.`));
+  manager.on('nodeDisconnect', (node) => logger.warn(`[Music] Node "${node.id}" disconnected.`));
+  manager.on('nodeError', (node, error) => {
     try {
       logger.error(`[Music] Node "${node?.id}" encountered an error: ${error?.message}`);
       logger.debug(error?.stack || 'No stack available');
@@ -138,18 +149,20 @@ export default async function init(ctx) {
     }
   });
 
-  manager.on("trackStart", (player, track) => {
+  manager.on('trackStart', (player, track) => {
     try {
       const title = track?.info?.title || '<unknown title>';
       const author = track?.info?.author || '<unknown author>';
-      logger.info(`[Music] Started playing ${title} by ${author} on guild ${player?.guildId} in channel ${player?.voiceChannelId}`);
+      logger.info(
+        `[Music] Started playing ${title} by ${author} on guild ${player?.guildId} in channel ${player?.voiceChannelId}`
+      );
       logger.debug(`[Music] Track details: ${JSON.stringify(track?.info || {})}`);
     } catch (err) {
       logger.warn(`[Music] trackStart handler failed: ${err.message}`);
     }
   });
 
-  manager.on("trackEnd", (player, track) => {
+  manager.on('trackEnd', (player, track) => {
     try {
       const title = track?.info?.title || '<unknown title>';
       logger.info(`[Music] Finished playing ${title} on guild ${player?.guildId}.`);
@@ -158,7 +171,22 @@ export default async function init(ctx) {
         logger.debug(`[Music] trackEnd ignored because player ${player.guildId} is transitioning.`);
         return;
       }
-      if (player.queue && player.queue.size > 0) {
+      const queueSize = (() => {
+        try {
+          if (!player || !player.queue) return 0;
+          const q = player.queue;
+          if (typeof q.size === 'number') return q.size;
+          if (Array.isArray(q)) return q.length;
+          if (q.items && Array.isArray(q.items)) return q.items.length;
+          if (q.tracks && Array.isArray(q.tracks)) return q.tracks.length;
+          if (typeof q.length === 'number') return q.length;
+          logger.debug(`[Music] Unexpected queue shape keys: ${Object.keys(q).join(', ')}`);
+          return 0;
+        } catch (e) {
+          return 0;
+        }
+      })();
+      if (queueSize > 0) {
         player._transitioning = true;
         if (typeof player.play === 'function') player.play();
         player._transitioning = false;
@@ -170,12 +198,16 @@ export default async function init(ctx) {
     }
   });
 
-  manager.on("queueEnd", player => {
+  manager.on('queueEnd', (player) => {
     try {
-      logger.info(`[Music] Queue ended on guild ${player?.guildId} in channel ${player?.voiceChannelId}. Destroying player.`);
+      logger.info(
+        `[Music] Queue ended on guild ${player?.guildId} in channel ${player?.voiceChannelId}. Destroying player.`
+      );
       if (player) {
         if (player._transitioning) {
-          logger.debug(`[Music] queueEnd ignored because player ${player.guildId} is transitioning.`);
+          logger.debug(
+            `[Music] queueEnd ignored because player ${player.guildId} is transitioning.`
+          );
           return;
         }
         player._transitioning = true;
@@ -188,7 +220,7 @@ export default async function init(ctx) {
   });
 
   // CRITICAL: Handle Discord raw events for voice connections
-  const rawHandler = d => manager.sendRawData(d);
+  const rawHandler = (d) => manager.sendRawData(d);
   ctx.client.on('raw', rawHandler);
   lifecycle.addDisposable(() => ctx.client.off('raw', rawHandler));
 
@@ -204,13 +236,13 @@ export default async function init(ctx) {
         id: ctx.client.user.id,
         username: ctx.client.user.username,
       });
-      logger.info("[Music] Lavalink Manager initialized.");
+      logger.info('[Music] Lavalink Manager initialized.');
     } catch (error) {
       logger.error(`[Music] Failed to initialize Lavalink Manager: ${error.message}`);
     }
   };
-  ctx.client.once("ready", onReady);
-  lifecycle.addDisposable(() => ctx.client.off("ready", onReady));
+  ctx.client.once('ready', onReady);
+  lifecycle.addDisposable(() => ctx.client.off('ready', onReady));
 
   // Register music commands
   const cmdPlay = createPlayCommand(ctx);
@@ -261,7 +293,7 @@ export default async function init(ctx) {
   async function disposeModule() {
     if (_disposed) return;
     _disposed = true;
-    logger.info("[Music] Module unloaded.");
+    logger.info('[Music] Module unloaded.');
     try {
       disposePlayCmd?.();
       disposeSkipCmd?.();
@@ -286,10 +318,10 @@ export default async function init(ctx) {
 
   lifecycle.addDisposable(() => disposeModule());
 
-  logger.info("[Music] Module loaded.");
+  logger.info('[Music] Module loaded.');
   return {
     name: moduleName,
-    description: "Feature-rich music module powered by Lavalink.",
-    dispose: disposeModule
+    description: 'Feature-rich music module powered by Lavalink.',
+    dispose: disposeModule,
   };
 }
