@@ -1,0 +1,32 @@
+## Module: modlog
+
+### /auditlog
+- Description: Audit log utilities
+- Options:
+  - event (String) — optional
+  - executor (User) — optional
+  - target (User) — optional
+  - channel (Channel) — optional
+  - role (Role) — optional
+  - emoji (String) — optional
+  - webhook (String) — optional
+  - integration (String) — optional
+  - since (String) — optional
+  - until (String) — optional
+  - reason (String) — optional
+  - page (Integer) — optional
+  - page_size (Integer) — optional
+  - format (String) — optional
+  - event (String) — optional
+  - executor (User) — optional
+  - target (User) — optional
+  - channel (Channel) — optional
+  - role (Role) — optional
+  - emoji (String) — optional
+  - webhook (String) — optional
+  - integration (String) — optional
+  - since (String) — optional
+  - until (String) — optional
+  - reason (String) — optional
+  - id (String) — optional
+- Source: modules/modlog/index.js
