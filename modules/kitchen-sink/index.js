@@ -10,7 +10,7 @@ import {
   EmbedBuilder,
 } from "discord.js";
 
-// The module entrypoint. See HOW_TO_CREATE_A_MODULE.md for lifecycle details.
+// The module entrypoint. See docs/MODULE_CREATION_GUIDE.md for lifecycle details.
 export default async function init(ctx) {
   const moduleName = "kitchen-sink";
 
