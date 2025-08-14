@@ -18,9 +18,13 @@ export function createSkipToCommand(ctx) {
     }
 
     try {
-      // Lavalink.js queue is 0-indexed, so position - 1
-      // The play method can take an index to skip to
-      await player.play(player.queue.tracks[position - 1]);
+      // Remove all tracks before the target position.
+      // The `remove` method modifies the queue in place.
+      player.queue.remove(0, position - 1);
+
+      // Skip the current song to start playing the new first song in the queue.
+      await player.skip();
+
       await interaction.editReply({ embeds: [embed.success(`Skipped to song at position ${position}.`)] });
     } catch (error) {
       logger.error(`[Music] Error skipping to song: ${error.message}`);

@@ -67,6 +67,13 @@ export function createPlayCommand(ctx) {
 
       const res = await player.search({ query, source: "ytsearch" }, interaction.user);
 
+      // Re-validate player state after await, in case it was destroyed during search
+      const currentPlayer = manager.players.get(interaction.guild.id);
+      if (!currentPlayer || currentPlayer.state === "DESTROYED") {
+        logger.info(`[Music] Player for guild ${interaction.guild.id} was destroyed during song search. Aborting play command.`);
+        return;
+      }
+
       if (!res || !res.tracks.length) {
         return interaction.editReply({ embeds: [embed.error(`No results found for 
 ${query}
