@@ -1,4 +1,5 @@
 import { ApplicationCommandOptionType } from "discord.js";
+import { formatDuration } from "../utils/formatters.js";
 
 export function createSeekCommand(ctx) {
   const { v2, logger, music, embed } = ctx;
@@ -20,6 +21,10 @@ export function createSeekCommand(ctx) {
 
     if (!player || !player.playing) {
       return interaction.editReply({ embeds: [embed.error("No song is currently playing.")] });
+    }
+
+    if (player.queue.current.info.isStream) {
+      return interaction.editReply({ embeds: [embed.error("You cannot seek in a live stream.")] });
     }
 
     const timeString = interaction.options.getString("time");
@@ -53,10 +58,4 @@ export function createSeekCommand(ctx) {
   });
 
   return cmdSeek;
-}
-
-function formatDuration(ms) {
-  const minutes = Math.floor(ms / 60000);
-  const seconds = ((ms % 60000) / 1000).toFixed(0);
-  return minutes + ":" + (seconds < 10 ? '0' : '') + seconds;
 }

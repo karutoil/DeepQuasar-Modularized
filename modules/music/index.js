@@ -87,21 +87,35 @@ export default async function init(ctx) {
     logger.info(`[Music] Started playing ${track.info.title} by ${track.info.author} on guild ${player.guildId} in channel ${player.voiceChannelId}`);
     logger.debug(`[Music] Track details: ${JSON.stringify(track.info)}`);
   });
-  manager.on("trackEnd", (player, track) => {
-    logger.info(`[Music] Finished playing ${track.info.title} on guild ${player.guildId}.`);
+  manager.on("trackEnd", (player, track, payload) => {
+    logger.info(`[Music] Finished playing ${track.info.title} on guild ${player.guildId}. Reason: ${payload.reason}.`);
+    // autoSkip is enabled, so we don't need to manually call player.play() here.
+    // lavalink-client will handle playing the next track.
     if (player.queue.size > 0) {
-      player.play();
+      logger.debug(`[Music] Queue has ${player.queue.size} more tracks. autoSkip will handle playback.`);
     } else {
-      logger.info(`[Music] Queue ended on guild ${player.guildId}.`);
-      // Optionally destroy player after a delay if no more tracks and nobody is in voice channel
-      // For now, let's rely on onEmptyQueue destroyAfterMs
+      logger.info(`[Music] Queue is empty on guild ${player.guildId}.`);
     }
   });
 
-  manager.on("queueEnd", player => {
-    logger.info(`[Music] Queue ended on guild ${player.guildId} in channel ${player.voiceChannelId}. Destroying player.`);
-    player.destroy();
+  manager.on("trackStuck", (player, track, payload) => {
+    logger.warn(`[Music] Track stuck: ${track.info.title} on guild ${player.guildId}. Reason: ${payload.type}. Threshold: ${payload.thresholdMs}ms.`);
+    if (player.queue.size > 0) {
+      logger.info(`[Music] Skipping to next track on guild ${player.guildId}.`);
+      player.skip();
+    }
   });
+
+  manager.on("trackError", (player, track, payload) => {
+    logger.error(`[Music] Track error: ${track.info.title} on guild ${player.guildId}. Error: ${payload.error}.`);
+    if (player.queue.size > 0) {
+      logger.info(`[Music] Skipping to next track on guild ${player.guildId}.`);
+      player.skip();
+    }
+  });
+
+  // The onEmptyQueue option is configured to handle this automatically after a 30s delay.
+  // No explicit queueEnd handler is needed.
 
   // CRITICAL: Handle Discord raw events for voice connections
   ctx.client.on("raw", d => manager.sendRawData(d));

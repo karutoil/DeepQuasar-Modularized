@@ -1,5 +1,6 @@
 import { ApplicationCommandOptionType } from "discord.js";
 import { createPaginatedEmbed } from "../../../../core/ui.js";
+import { formatDuration } from "../../utils/formatters.js";
 
 export function createListCommand(ctx, cmdQueue) {
   const { logger, music, embed, lifecycle } = ctx;
@@ -15,7 +16,9 @@ export function createListCommand(ctx, cmdQueue) {
     }
 
     const itemsPerPage = 10;
-    const totalPages = Math.ceil(player.queue.tracks.length / itemsPerPage);
+    const maxPages = 25; // Cap to prevent performance issues with massive queues
+    const totalTracks = player.queue.tracks.length;
+    const totalPages = Math.min(Math.ceil(totalTracks / itemsPerPage), maxPages);
     const page = interaction.options.getInteger("page") || 1;
 
     if (page < 1 || page > totalPages) {
@@ -36,14 +39,20 @@ export function createListCommand(ctx, cmdQueue) {
       let pageDescription = "";
       if (player.queue.current && i === 0) { // Only show "Now Playing" on the first page
         const currentDuration = player.queue.current.info.isStream ? "LIVE" : formatDuration(player.queue.current.info.duration);
-        pageDescription += `**Now Playing:** [${player.queue.current.info.title}](${player.queue.current.info.uri}) - ${player.queue.current.info.author} (${currentDuration})`;
+        pageDescription += `**Now Playing:** [${player.queue.current.info.title}](${player.queue.current.info.uri}) - ${player.queue.current.info.author} (${currentDuration})\n`;
       }
       pageDescription += formattedQueue.join("\n");
 
-      pages.push({
+      const pageEmbed = {
         title: `Music Queue (Page ${i + 1}/${totalPages})`,
         description: pageDescription,
-      });
+      };
+
+      if (i === maxPages - 1 && totalTracks > maxPages * itemsPerPage) {
+        pageEmbed.footer = { text: `Displaying first ${maxPages * itemsPerPage} of ${totalTracks} songs.` };
+      }
+
+      pages.push(pageEmbed);
     }
 
     const { message, dispose } = createPaginatedEmbed(ctx, cmdQueue, "music", pages, {
@@ -54,10 +63,4 @@ export function createListCommand(ctx, cmdQueue) {
     await interaction.editReply(message);
     lifecycle.addDisposable(dispose);
   };
-}
-
-function formatDuration(ms) {
-  const minutes = Math.floor(ms / 60000);
-  const seconds = ((ms % 60000) / 1000).toFixed(0);
-  return minutes + ":" + (seconds < 10 ? '0' : '') + seconds;
 }

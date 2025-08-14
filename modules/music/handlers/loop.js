@@ -30,16 +30,13 @@ export function createLoopCommand(ctx) {
     const mode = interaction.options.getString("mode");
 
     try {
-      if (mode === "off") {
-        player.repeatMode = "none";
-        await interaction.editReply({ embeds: [embed.success("Loop mode set to off.")] });
-      } else if (mode === "song") {
-        player.repeatMode = "track";
-        await interaction.editReply({ embeds: [embed.success("Loop mode set to song.")] });
-      } else if (mode === "queue") {
-        player.repeatMode = "queue";
-        await interaction.editReply({ embeds: [embed.success("Loop mode set to queue.")] });
-      }
+      // The setRepeatMode method ensures the state is set correctly.
+      // The valid modes are "off", "track", and "queue".
+      player.setRepeatMode(mode);
+
+      // Capitalize first letter for the reply message
+      const friendlyMode = mode.charAt(0).toUpperCase() + mode.slice(1);
+      await interaction.editReply({ embeds: [embed.success(`Loop mode set to ${friendlyMode}.`)] });
     } catch (error) {
       logger.error(`[Music] Error setting loop mode: ${error.message}`);
       await interaction.editReply({ embeds: [embed.error(`An error occurred while trying to set the loop mode: ${error.message}`)] });

@@ -7,7 +7,7 @@ const DEFAULT_VOLUME = 50; // Default volume if not set
 const GuildMusicSettingsSchema = z.object({
   _id: z.any().optional(), // MongoDB ObjectId
   guildId: z.string(),
-  volume: z.number().min(0).max(100).default(DEFAULT_VOLUME),
+  volume: z.number().min(0).max(1000).default(DEFAULT_VOLUME),
 });
 
 const CACHE_TTL_MS = 60_000; // Cache for 1 minute

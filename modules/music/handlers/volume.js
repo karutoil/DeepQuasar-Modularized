@@ -10,7 +10,7 @@ export function createVolumeCommand(ctx) {
     .setDescription("Sets the player volume.")
     .addIntegerOption(opt =>
       opt.setName("level")
-        .setDescription("The volume level (0-100).")
+        .setDescription("The volume level (0-1000). Values above 100 may cause distortion.")
         .setRequired(false)
         .setMinValue(0)
         .setMaxValue(1000)
