@@ -146,6 +146,10 @@ export default async function init(ctx) {
     await searchHandler.handlePagination(interaction);
   }, { prefix: true });
   lifecycle.addDisposable(offButton);
+  const offSelect = interactions.registerSelect(moduleName, "modlog:page:", async (interaction) => {
+    await searchHandler.handlePagination(interaction);
+  }, { prefix: true });
+  lifecycle.addDisposable(offSelect);
 
   // Register the command builder via v2 registrar
   const disposeCmd = v2.register(cmdModlog, moduleName);

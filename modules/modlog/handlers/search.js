@@ -1,7 +1,7 @@
 import { checkAuditPermissions } from "../utils/permissions.js";
 import { normalizeFilters } from "../utils/filters.js";
 import { searchAuditLogs } from "../services/auditSearchService.js";
-import { buildSearchEmbeds, decodeState } from "../utils/formatters.js";
+import { buildSearchEmbeds, decodeState, buildDetailEmbed } from "../utils/formatters.js";
 import { resolveEventAlias } from "../utils/constants.js";
 
 /**
@@ -69,7 +69,76 @@ export function createSearchHandler(ctx) {
         logger.warn("[ModLog] Invalid pagination token", { customId: interaction.customId });
         return interaction.reply({ content: "Invalid pagination token.", ephemeral: true });
       }
-      logger.debug("[ModLog] Decoded pagination state", { state: redact(state) });
+  logger.debug("[ModLog] Decoded pagination state", { state: redact(state) });
+
+  // If this is a select interaction (details request), show a detail view
+  if (interaction.isSelectMenu?.()) {
+        const vals = interaction.values || [];
+        const selectedId = vals[0];
+        if (!selectedId) return interaction.reply({ content: "No entry selected.", ephemeral: true });
+
+        // Re-run the search for the same page to obtain items (we don't persist items across interactions)
+        const baseFiltersForSelect = {
+          ...state,
+          ...(typeof state.type === "string" ? resolveEventAlias(state.type) : { type: state.type })
+        };
+
+        const selRes = await searchAuditLogs(ctx, interaction.guild, {
+          ...baseFiltersForSelect,
+          page: Number(baseFiltersForSelect.page) || 1,
+          pageSize: Number(baseFiltersForSelect.pageSize) || Number(ctx.config.get("MODLOG_DEFAULT_PAGE_SIZE", 10))
+        });
+
+        const entry = selRes.items.find(e => String(e.id) === String(selectedId));
+        if (!entry) {
+          return interaction.reply({ content: "Selected entry not found (it may be out of range).", ephemeral: true });
+        }
+
+        const detail = buildDetailEmbed(ctx, interaction, entry);
+        // Build a back button that encodes current state so we can restore the page
+        const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = await import("discord.js");
+        const backId = String(interaction.customId).replace(/:select$/, ":back");
+        const backBtn = new ButtonBuilder().setCustomId(backId).setLabel("Back").setStyle(ButtonStyle.Secondary);
+        const row = new ActionRowBuilder().addComponents(backBtn);
+
+        try {
+          if (interaction.isButton?.() || interaction.isSelectMenu?.()) {
+            await interaction.update({ embeds: [detail], components: [row], ephemeral: true });
+          } else {
+            await interaction.reply({ embeds: [detail], components: [row], ephemeral: true });
+          }
+        } catch (e) {
+          try { await interaction.reply({ embeds: [detail], components: [row], ephemeral: true }); } catch {}
+        }
+        return;
+      }
+
+      // If this is a 'back' button from the detail view, restore the search page
+      if (interaction.isButton?.() && String(interaction.customId).endsWith(":back")) {
+        const baseFilters = {
+          ...state,
+          ...(typeof state.type === "string" ? resolveEventAlias(state.type) : { type: state.type })
+        };
+
+        const res = await searchAuditLogs(ctx, interaction.guild, {
+          ...baseFilters,
+          page: Number(baseFilters.page) || 1,
+          pageSize: Number(baseFilters.pageSize) || Number(ctx.config.get("MODLOG_DEFAULT_PAGE_SIZE", 10))
+        });
+
+        const { embeds, components } = buildSearchEmbeds(ctx, interaction, res.items, res.meta, {
+          ...res.meta,
+          ...state
+        });
+
+        try {
+          await interaction.update({ embeds, components });
+        } catch (e) {
+          logger.warn("[ModLog] back button update failed, replying instead", { error: e?.message });
+          try { await interaction.reply({ embeds, components, ephemeral: true }); } catch {}
+        }
+        return;
+      }
 
       const baseFilters = {
         ...state,
