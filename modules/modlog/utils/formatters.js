@@ -65,7 +65,7 @@ function userRef(client, guild, id) {
   try {
     const m = guild?.members?.cache?.get?.(id);
     if (m && m.user) return `${m.user.tag} (${m.id})`;
-  } catch {}
+  } catch (err) { void err; }
   const u = client.users?.cache?.get?.(id);
   return u ? `${u.tag} (${id})` : idRef(id);
 }
@@ -75,19 +75,19 @@ function resolveTargetRef(guild, client, id, entry) {
   try {
     const m = guild?.members?.cache?.get?.(id);
     if (m && m.user) return `${m.user.tag} (${m.id})`;
-  } catch {}
+  } catch (err) { void err; }
   try {
     const ch = guild?.channels?.cache?.get?.(id);
     if (ch) return `#${ch.name} (${id})`;
-  } catch {}
+  } catch (err) { void err; }
   try {
     const r = guild?.roles?.cache?.get?.(id);
     if (r) return `@${r.name} (${id})`;
-  } catch {}
+  } catch (err) { void err; }
   try {
     const e = client?.emojis?.cache?.get?.(id);
     if (e) return `${e.name} (:${e.identifier}:) (${id})`;
-  } catch {}
+  } catch (err) { void err; }
 
   // Try to extract a name from audit entry changes (useful for deleted channels/roles)
   try {
@@ -101,7 +101,7 @@ function resolveTargetRef(guild, client, id, entry) {
         if (nm) return `${nm} (${id})`;
       }
     }
-  } catch {}
+  } catch (err) { void err; }
 
   return idRef(id);
 }
@@ -329,11 +329,11 @@ function resolveSimpleRef(guild, client, id) {
   try {
     const m = guild?.members?.cache?.get?.(id);
     if (m && m.user) return `${m.user.tag}`;
-  } catch {}
+  } catch (err) { void err; }
   try {
     const u = client?.users?.cache?.get?.(id);
     if (u) return `${u.tag}`;
-  } catch {}
+  } catch (err) { void err; }
   return id;
 }
 
@@ -341,7 +341,7 @@ function resolveChannelRef(guild, id) {
   try {
     const ch = guild?.channels?.cache?.get?.(id);
     if (ch) return `#${ch.name}`;
-  } catch {}
+  } catch (err) { void err; }
   return id;
 }
 
@@ -349,7 +349,7 @@ function resolveRoleRef(guild, id) {
   try {
     const r = guild?.roles?.cache?.get?.(id);
     if (r) return `@${r.name}`;
-  } catch {}
+  } catch (err) { void err; }
   return id;
 }
 
@@ -357,7 +357,7 @@ function resolveEmojiRef(client, id) {
   try {
     const e = client?.emojis?.cache?.get?.(id);
     if (e) return `${e.name}`;
-  } catch {}
+  } catch (err) { void err; }
   return id;
 }
 

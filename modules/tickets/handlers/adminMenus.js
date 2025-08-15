@@ -183,13 +183,13 @@ export async function registerAdminMenus(ctx) {
         await upsertGuildSettings(ctx, interaction.guildId, patch);
 
         // Always followUp success to avoid any "Something went wrong" from modal contexts
-        try { await interaction.followUp?.({ content: "Successfully updated.", ephemeral: true }); } catch { try { await interaction.reply({ content: "Successfully updated.", ephemeral: true }); } catch {} }
+        try { await interaction.followUp?.({ content: "Successfully updated.", ephemeral: true }); } catch { try { await interaction.reply({ content: "Successfully updated.", ephemeral: true }); } catch (err) { void err; } }
 
         // Refresh admin panel as fresh ephemeral
-        try { await showGeneralSettings(ctx, interaction); } catch {}
+        try { await showGeneralSettings(ctx, interaction); } catch (err) { void err; }
 
       } catch (e) {
-        try { await interaction.followUp?.({ content: "Failed to save transcript options.", ephemeral: true }); } catch { try { await interaction.reply({ content: "Failed to save transcript options.", ephemeral: true }); } catch {} }
+        try { await interaction.followUp?.({ content: "Failed to save transcript options.", ephemeral: true }); } catch { try { await interaction.reply({ content: "Failed to save transcript options.", ephemeral: true }); } catch (err) { void err; } }
       }
     }, { prefix: true })
   );
@@ -245,7 +245,7 @@ export async function registerAdminMenus(ctx) {
         try {
           const m = String(interaction.customId || "").match(/:MSG_(\d+)/);
           sourceMessageId = m?.[1] || null;
-        } catch {}
+        } catch (err) { void err; }
 
         const format = interaction.fields.getTextInputValue("format")?.trim();
         const patch = {};
@@ -255,9 +255,9 @@ export async function registerAdminMenus(ctx) {
         // Ack
         const msg = `Ticket name format ${format ? "saved" : "cleared to default"}.`;
         if (!interaction.replied && !interaction.deferred) {
-          try { await interaction.reply({ content: msg, ephemeral: true }); } catch {}
+          try { await interaction.reply({ content: msg, ephemeral: true }); } catch (err) { void err; }
         } else {
-          try { await interaction.followUp?.({ content: msg, ephemeral: true }); } catch {}
+          try { await interaction.followUp?.({ content: msg, ephemeral: true }); } catch (err) { void err; }
         }
 
         // Re-render general settings ephemeral
@@ -371,7 +371,7 @@ export async function registerAdminMenus(ctx) {
         try {
           const m = String(interaction.customId || "").match(/:MSG_(\d+)/);
           sourceMessageId = m?.[1] || null;
-        } catch {}
+        } catch (err) { void err; }
 
         const inactivityMs = interaction.fields.getTextInputValue("inactivityMs")?.trim();
         const warningMs = interaction.fields.getTextInputValue("warningMs")?.trim();
@@ -386,9 +386,9 @@ export async function registerAdminMenus(ctx) {
 
         // Ack
         if (!interaction.replied && !interaction.deferred) {
-          try { await interaction.reply({ content: "Auto-closure settings saved.", ephemeral: true }); } catch {}
+          try { await interaction.reply({ content: "Auto-closure settings saved.", ephemeral: true }); } catch (err) { void err; }
         } else {
-          try { await interaction.followUp?.({ content: "Auto-closure settings saved.", ephemeral: true }); } catch {}
+          try { await interaction.followUp?.({ content: "Auto-closure settings saved.", ephemeral: true }); } catch (err) { void err; }
         }
 
         // Re-render general settings ephemeral
@@ -516,7 +516,7 @@ export async function registerAdminMenus(ctx) {
               ...(buttonLabel ? [{ name: "Buttons", value: `Set 1 button: "${buttonLabel.slice(0,80)}"`, inline: false }] : []),
             ]
           });
-        } catch {}
+        } catch (err) { void err; }
         await safeReply(interaction, { content: "Panel updated.", ephemeral: true });
       } catch {
         await safeReply(interaction, { content: "Failed to update panel.", ephemeral: true });
@@ -593,7 +593,7 @@ export async function registerAdminMenus(ctx) {
               { name: "Type ID", value: `${doc.typeId}`, inline: true }
             ]
           });
-        } catch {}
+        } catch (err) { void err; }
         await safeReply(interaction, { content: `Type created: ${doc.name} (${doc.typeId})`, ephemeral: true });
       } catch {
         await safeReply(interaction, { content: "Failed to create type.", ephemeral: true });
@@ -697,7 +697,7 @@ export async function registerAdminMenus(ctx) {
               { name: "Roles", value: (roleIds.length ? roleIds.map(r => `<@&${r}>`).join(", ") : "None"), inline: false }
             ]
           });
-        } catch {}
+        } catch (err) { void err; }
         await safeReply(interaction, { content: "Type ping roles saved.", ephemeral: true });
       } catch (e) {
         await safeReply(interaction, { content: "Failed to save ping roles.", ephemeral: true });
@@ -729,7 +729,7 @@ export async function registerAdminMenus(ctx) {
               ...(welcomeMessage ? [{ name: "Welcome", value: `${(welcomeMessage || "").slice(0, 100)}`, inline: false }] : []),
             ]
           });
-        } catch {}
+        } catch (err) { void err; }
         await safeReply(interaction, { content: "Type updated.", ephemeral: true });
       } catch {
         await safeReply(interaction, { content: "Failed to update type.", ephemeral: true });
@@ -770,7 +770,7 @@ export async function registerAdminMenus(ctx) {
             color: 0xed4245,
             fields: [{ name: "Type ID", value: `${typeId}`, inline: true }]
           });
-        } catch {}
+        } catch (err) { void err; }
         await safeReply(interaction, { content: "Type deleted.", ephemeral: true });
       } catch {
         await safeReply(interaction, { content: "Failed to delete type.", ephemeral: true });
@@ -779,11 +779,11 @@ export async function registerAdminMenus(ctx) {
   );
 
   lifecycle.addDisposable(() => {
-    for (const d of disposers) { try { d?.(); } catch {} }
+    for (const d of disposers) { try { d?.(); } catch (err) { void err; } }
   });
 
   return () => {
-    for (const d of disposers) { try { d?.(); } catch {} }
+    for (const d of disposers) { try { d?.(); } catch (err) { void err; } }
   };
 }
 

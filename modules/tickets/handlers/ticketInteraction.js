@@ -314,8 +314,8 @@ export async function registerTicketInteractionHandlers(ctx) {
               ],
               ticket: { channelId: channel.id, ticketId: doc.ticketId },
             });
-          } catch {}
-        } catch {}
+          } catch (err) { void err; }
+        } catch (err) { void err; }
         // Initial message in ticket channel
         const typeLabel = typeDoc?.name || (typeDoc === null ? "Unknown Type" : typeId || "default");
         const intro = new EmbedBuilder()
@@ -361,7 +361,7 @@ export async function registerTicketInteractionHandlers(ctx) {
               typeId: typeId || null,
             });
           }
-        } catch {}
+        } catch (err) { void err; }
 
         // Acknowledge creation to the user
         await safeReply(interaction, { content: `Ticket created: <#${channel.id}>`, ephemeral: true });
@@ -373,13 +373,13 @@ export async function registerTicketInteractionHandlers(ctx) {
 
   lifecycle.addDisposable(() => {
     for (const d of disposers) {
-      try { d?.(); } catch {}
+      try { d?.(); } catch (err) { void err; }
     }
   });
 
   return () => {
     for (const d of disposers) {
-      try { d?.(); } catch {}
+      try { d?.(); } catch (err) { void err; }
     }
   };
 }

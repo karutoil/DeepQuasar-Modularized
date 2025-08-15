@@ -69,7 +69,7 @@ export function createStateManager(logger, { provider = "memory", options = {} }
       // dynamic import to avoid hard dependency
       // eslint-disable-next-line global-require, import/no-unresolved
       mongo = require?.("../core/mongo.js") || null;
-    } catch {}
+    } catch (err) { void err; }
     if (!mongo || !mongo.getDb) {
       logger?.warn?.("state(mongo): core/mongo.js not available; falling back to memory");
       return createMemoryProvider();
@@ -213,7 +213,7 @@ export function createStateManager(logger, { provider = "memory", options = {} }
   }
 
   async function dispose() {
-    try { clearInterval(interval); } catch {}
+    try { clearInterval(interval); } catch (err) { void err; }
     if (isAsync) {
       // nothing else needed
     } else {

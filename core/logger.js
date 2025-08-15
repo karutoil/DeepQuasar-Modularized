@@ -29,11 +29,11 @@ function patchWinstonOnce() {
         if (exists) {
           return this;
         }
-      } catch {} // eslint-disable-line no-empty
+      } catch (err) { void err; } // eslint-disable-line no-empty
       return originalAdd.call(this, transport);
     };
     globalThis[PATCH_KEY] = true;
-  } catch {} // eslint-disable-line no-empty
+  } catch (err) { void err; } // eslint-disable-line no-empty
 }
 
 // Diagnostics disabled
@@ -221,7 +221,7 @@ export function getLogger(level = "info", config) {
       if (level && globalThis[GLOBAL_KEY].level !== level) {
         globalThis[GLOBAL_KEY].level = level;
       }
-    } catch {} // eslint-disable-line no-empty
+    } catch (err) { void err; } // eslint-disable-line no-empty
   }
   return globalThis[GLOBAL_KEY];
 }

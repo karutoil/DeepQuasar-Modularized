@@ -202,7 +202,7 @@ export function createInteractions(client, logger) {
         if (interaction.isRepliable?.() && !interaction.replied && !interaction.deferred) {
           await interaction.reply({ content: "An error occurred while handling this interaction.", ephemeral: true });
         }
-      } catch {}
+      } catch (err) { void err; }
     }
   }
 

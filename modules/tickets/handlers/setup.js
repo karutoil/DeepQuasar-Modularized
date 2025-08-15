@@ -81,7 +81,7 @@ export function registerSetupCommand(ctx) {
               : 'An error occurred while opening the setup panel.',
           ephemeral: true,
         });
-      } catch {}
+      } catch (err) { void err; }
     }
   });
 
@@ -89,7 +89,7 @@ export function registerSetupCommand(ctx) {
   lifecycle.addDisposable(() => {
     try {
       disposer?.();
-    } catch {}
+    } catch (err) { void err; }
   });
 
   // Register button routes for main setup entry (delegated to adminMenus)
@@ -97,7 +97,7 @@ export function registerSetupCommand(ctx) {
   return () => {
     try {
       disposer?.();
-    } catch {}
+    } catch (err) { void err; }
   };
 }
 

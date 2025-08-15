@@ -78,7 +78,7 @@ export function createPaginatedEmbed(ctx, builder, moduleName, pages, { ephemera
     await interaction.update(render(nextIdx));
   });
 
-  const dispose = () => { try { offPrev?.(); } catch {} try { offNext?.(); } catch {} state.clear(); };
+  const dispose = () => { try { offPrev?.(); } catch (err) { void err; } try { offNext?.(); } catch (err) { void err; } state.clear(); };
 
   return { message: render(clamped), dispose };
 }
@@ -100,14 +100,14 @@ export function createConfirmationDialog(ctx, builder, moduleName, prompt, onCon
 
   const offConfirm = ctx.interactions.registerButton(moduleName, BTN_CONFIRM, async (interaction) => {
     try { await onConfirm?.(interaction); } catch (e) { ctx.logger?.warn?.(`confirm handler error: ${e?.message}`); }
-    try { await interaction.update({ components: [] }); } catch {}
+    try { await interaction.update({ components: [] }); } catch (err) { void err; }
   });
   const offCancel = ctx.interactions.registerButton(moduleName, BTN_CANCEL, async (interaction) => {
     try { await onCancel?.(interaction); } catch (e) { ctx.logger?.warn?.(`cancel handler error: ${e?.message}`); }
-    try { await interaction.update({ components: [] }); } catch {}
+    try { await interaction.update({ components: [] }); } catch (err) { void err; }
   });
 
-  const dispose = () => { try { offConfirm?.(); } catch {} try { offCancel?.(); } catch {} };
+  const dispose = () => { try { offConfirm?.(); } catch (err) { void err; } try { offCancel?.(); } catch (err) { void err; } };
 
   return { message, dispose };
 }
@@ -135,7 +135,7 @@ export function createMultiSelectMenu(ctx, builder, moduleName, options, onSelec
     try { await onSelect?.(interaction, interaction.values); } catch (e) { ctx.logger?.warn?.(`multi-select handler error: ${e?.message}`); }
   });
 
-  const dispose = () => { try { off?.(); } catch {} };
+  const dispose = () => { try { off?.(); } catch (err) { void err; } };
 
   return { message, dispose };
 }
@@ -182,7 +182,7 @@ export function parseModal(interaction) {
         data[name] = c.value;
       }
     }
-  } catch {}
+  } catch (err) { void err; }
   return data;
 }
 
@@ -221,11 +221,11 @@ export function createWizard(ctx, builder, moduleName, state, steps = []) {
   });
 
   const offCancel = ctx.interactions.registerButton(moduleName, BTN_CANCEL, async (interaction) => {
-    try { await interaction.update({ content: "Wizard cancelled.", components: [] }); } catch {}
-    try { state.delete?.("wizard_step"); } catch {}
+    try { await interaction.update({ content: "Wizard cancelled.", components: [] }); } catch (err) { void err; }
+    try { state.delete?.("wizard_step"); } catch (err) { void err; }
   });
 
-  const dispose = () => { try { offNext?.(); } catch {} try { offCancel?.(); } catch {} };
+  const dispose = () => { try { offNext?.(); } catch (err) { void err; } try { offCancel?.(); } catch (err) { void err; } };
 
   return { start, dispose };
 }

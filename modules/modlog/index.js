@@ -208,18 +208,18 @@ export default async function init(ctx) {
         // If already responded or expired, ignore; else provide minimal fallback
         try {
           await interaction.respond([{ name: 'all', value: 'all' }]);
-        } catch {}
+        } catch (err) { void err; }
       }
     } catch (e) {
       // Final fallback
       try {
         await interaction.respond([{ name: 'all', value: 'all' }]);
-      } catch {}
+      } catch (err) { void err; }
       try {
         mod.logger?.warn?.('[ModLog] Autocomplete failed, responded with fallback', {
           error: e?.message,
         });
-      } catch {}
+      } catch (err) { void err; }
     }
   });
 
@@ -256,13 +256,13 @@ export default async function init(ctx) {
       logger.info('[ModLog] Module unloaded.');
       try {
         disposeCmd?.();
-      } catch {}
+      } catch (err) { void err; }
       try {
         offButton?.();
-      } catch {}
+      } catch (err) { void err; }
       try {
         interactions.removeModule(moduleName);
-      } catch {}
+      } catch (err) { void err; }
     },
   };
 }

@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { logModerationAction } from './modlog.js';
 
 /**
@@ -7,7 +7,7 @@ import { logModerationAction } from './modlog.js';
  * Subcommands: add (ban), remove (unban)
  */
 export function createBanCommand(ctx) {
-  const { v2, permissions, embed, modlog, logger } = ctx;
+  const { v2, embed, logger } = ctx;
 
   const cmdBan = v2
     .createInteractionCommand()
@@ -95,7 +95,7 @@ function buildModerationDmEmbed({ action, reason, executor, server }) {
 
 // Export a direct handler for index.js
 export async function handleBan(interaction, ctx) {
-  const { permissions, embed, modlog, logger } = ctx;
+  const { embed, logger } = ctx;
   await interaction.deferReply({ ephemeral: true });
 
   try {
@@ -254,6 +254,8 @@ export async function handleBan(interaction, ctx) {
       await interaction.editReply({
         embeds: [embed.error(`Unexpected error: ${outerErr.message}`)],
       });
-    } catch {}
+    } catch (editErr) {
+      logger.warn('[Moderation] Failed to send error reply to interaction', { error: editErr });
+    }
   }
 }

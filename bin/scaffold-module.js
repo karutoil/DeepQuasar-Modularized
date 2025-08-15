@@ -62,7 +62,7 @@ export default async function init(ctx) {
   return {
     name: moduleName,
     description: "${name} module",
-    dispose: async () => { try { off?.(); } catch {} }
+    dispose: async () => { try { off?.(); } catch (err) { void err; } }
   };
 }
 `;
@@ -95,7 +95,7 @@ module.exports = async function init(ctx) {
   return {
     name: moduleName,
     description: "${name} module",
-    dispose: async () => { try { off && off(); } catch {} }
+    dispose: async () => { try { off && off(); } catch (err) { void err; } }
   };
 };
 `;

@@ -208,7 +208,7 @@ export default async function init(ctx) {
           // On cancel
           try {
             await i.update({ embeds: [eWarn(title, i18n.safeT("kitchen.hello.cancelled", { defaultValue: "Cancelled." }))], components: [] });
-          } catch {}
+          } catch (err) { void err; }
         },
         { ephemeral: true }
       );
@@ -382,7 +382,7 @@ export default async function init(ctx) {
           bus.publish("kitchen.job.tick", { at: utils.now() });
         }, { timezone: "UTC", immediate: false });
         scheduledOff = off;
-        lifecycle.addDisposable(() => { try { off?.(); } catch {} scheduledOff = null; });
+        lifecycle.addDisposable(() => { try { off?.(); } catch (err) { void err; } scheduledOff = null; });
         await interaction.reply({
           embeds: [eSuccess("Scheduler", i18n.safeT("kitchen.schedule.started", { defaultValue: "Background job scheduled." }))],
           components: [new ActionRowBuilder().addComponents(
@@ -404,7 +404,7 @@ export default async function init(ctx) {
     })
     .onButton("stop", async (interaction) => {
       if (scheduledOff) {
-        try { scheduledOff(); } catch {}
+        try { scheduledOff(); } catch (err) { void err; }
         scheduledOff = null;
         await interaction.update({
           embeds: [eInfo("Scheduler", i18n.safeT("kitchen.schedule.stopped", { defaultValue: "Background job stopped." }))],

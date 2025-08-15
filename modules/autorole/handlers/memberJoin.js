@@ -129,7 +129,7 @@ export function registerMemberJoinHandler(ctx) {
   client.on("guildMemberRemove", onGuildMemberRemove);
 
   return () => {
-    try { client.off("guildMemberAdd", onGuildMemberAdd); } catch {}
-    try { client.off("guildMemberRemove", onGuildMemberRemove); } catch {}
+    try { client.off("guildMemberAdd", onGuildMemberAdd); } catch (err) { void err; }
+    try { client.off("guildMemberRemove", onGuildMemberRemove); } catch (err) { void err; }
   };
 }

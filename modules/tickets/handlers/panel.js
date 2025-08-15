@@ -73,7 +73,7 @@ export async function registerPanelHandlers(ctx) {
         try {
           const { safeReply } = await import("../utils/validators.js");
           await safeReply(interaction, { content: `Cannot open create panel modal. Error: ${e?.message || 'Unknown error'}`, ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     })
   );
@@ -129,7 +129,7 @@ export async function registerPanelHandlers(ctx) {
         });
         try {
           await safeReply(interaction, { content: `Failed to prepare panel creation. Error: ${e?.message || 'Unknown error'}`, ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     })
   );
@@ -212,7 +212,7 @@ export async function registerPanelHandlers(ctx) {
               { name: "Channel", value: `<#${channel.id}>`, inline: true },
             ],
           });
-        } catch {}
+        } catch (err) { void err; }
 
         await safeReply(interaction, { content: `Panel published in <#${channel.id}> and saved (ID: ${panel.panelId}).`, ephemeral: true });
       } catch (e) {
@@ -224,7 +224,7 @@ export async function registerPanelHandlers(ctx) {
         });
         try {
           await safeReply(interaction, { content: `Failed to publish panel. Error: ${e?.message || 'Unknown error'}`, ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     }, { prefix: true })
   );
@@ -252,7 +252,7 @@ export async function registerPanelHandlers(ctx) {
         try {
           const { safeReply } = await import("../utils/validators.js");
           await safeReply(interaction, { content: "Failed to open panel list.", ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     })
   );
@@ -273,7 +273,7 @@ export async function registerPanelHandlers(ctx) {
       } catch (e) {
         try {
           await safeReply(interaction, { content: "Cannot open edit actions.", ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     })
   );
@@ -319,7 +319,7 @@ export async function registerPanelHandlers(ctx) {
         try {
           const { safeReply } = await import("../utils/validators.js");
           await safeReply(interaction, { content: `Failed to open add button flow. Error: ${e?.message || 'Unknown error'}`, ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     }, { prefix: true })
   );
@@ -363,7 +363,7 @@ export async function registerPanelHandlers(ctx) {
         });
         try {
           await safeReply(interaction, { content: `Cannot open label modal. Error: ${e?.message || 'Unknown error'}`, ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     }, { prefix: true })
   );
@@ -426,7 +426,7 @@ export async function registerPanelHandlers(ctx) {
               { name: "Label", value: label, inline: true }
             ]
           });
-        } catch {}
+        } catch (err) { void err; }
 
         await safeReply(interaction, { content: "Button added and panel re-published.", ephemeral: true });
       } catch (e) {
@@ -439,7 +439,7 @@ export async function registerPanelHandlers(ctx) {
         });
         try {
           await safeReply(interaction, { content: `Failed to add button. Error: ${e?.message || 'Unknown error'}`, ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     }, { prefix: true })
   );
@@ -464,7 +464,7 @@ export async function registerPanelHandlers(ctx) {
       } catch (e) {
         try {
           await safeReply(interaction, { content: "Failed to open remove menu.", ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     }, { prefix: true })
   );
@@ -499,13 +499,13 @@ export async function registerPanelHandlers(ctx) {
               { name: "Removed", value: `${removed?.label || "unknown"} (${removed?.typeId || "n/a"})`, inline: false }
             ]
           });
-        } catch {}
+        } catch (err) { void err; }
  
         await safeReply(interaction, { content: "Button removed and panel re-published.", ephemeral: true });
       } catch (e) {
         try {
           await safeReply(interaction, { content: "Failed to remove button.", ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     }, { prefix: true })
   );
@@ -529,7 +529,7 @@ export async function registerPanelHandlers(ctx) {
             color: 0x5865f2,
             fields: [{ name: "Panel ID", value: panelId, inline: true }]
           });
-        } catch {}
+        } catch (err) { void err; }
 
         await safeReply(interaction, { content: "Panel re-published.", ephemeral: true });
       } catch (e) {
@@ -542,7 +542,7 @@ export async function registerPanelHandlers(ctx) {
         });
         try {
           await safeReply(interaction, { content: `Failed to re-publish panel. Error: ${e?.message || 'Unknown error'}`, ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     }, { prefix: true })
   );

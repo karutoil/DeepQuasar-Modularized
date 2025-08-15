@@ -21,7 +21,7 @@ function getMongo(ctx) {
   if (coreMongo && typeof coreMongo.getDb === "function") return coreMongo;
   // Fallback creation (will share process-wide if config same)
   const m = createMongo(ctx.config, ctx.logger);
-  try { ctx.mongo = m; } catch {}
+  try { ctx.mongo = m; } catch (err) { void err; }
   return m;
 }
 

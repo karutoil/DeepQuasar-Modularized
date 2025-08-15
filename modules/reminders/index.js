@@ -78,7 +78,7 @@ export default async function init(ctx) {
   // Lifecycle disposal
   lifecycle.addDisposable(() => {
     for (const d of disposers) {
-      try { d?.(); } catch {}
+      try { d?.(); } catch (err) { void err; }
     }
   });
 
@@ -89,7 +89,7 @@ export default async function init(ctx) {
     dispose: async () => {
       logger.info("[Reminders] Module unloaded.");
       for (const d of disposers) {
-        try { d?.(); } catch {}
+        try { d?.(); } catch (err) { void err; }
       }
     }
   };

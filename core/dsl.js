@@ -7,18 +7,26 @@ export function createDsl({ logger, embed, rateLimiter, permissions, errorReport
   /**
    * Wrap handler with try/catch and standardized error reply.
    */
-  function withTryCatch(handler, { errorMessage = "An error occurred while processing your request." } = {}) {
+  function withTryCatch(
+    handler,
+    { errorMessage = 'An error occurred while processing your request.' } = {}
+  ) {
     return async (interaction, ...rest) => {
       try {
         await handler(interaction, ...rest);
       } catch (err) {
         logger.error(`Handler error: ${err?.message}`, { stack: err?.stack });
         try {
-          await errorReporter?.report(err, { scope: "handler", interactionName: getInteractionName(interaction) });
-        } catch {}
+          await errorReporter?.report(err, {
+            scope: 'handler',
+            interactionName: getInteractionName(interaction),
+          });
+        } catch (err) {
+          logger?.warn?.('errorReporter.report failed', err);
+        }
         try {
           if (interaction.isRepliable?.()) {
-            const e = embed.error({ title: "Error", description: errorMessage });
+            const e = embed.error({ title: 'Error', description: errorMessage });
             if (interaction.replied || interaction.deferred) {
               await interaction.followUp({ embeds: [e], ephemeral: true });
             } else {
@@ -52,7 +60,15 @@ export function createDsl({ logger, embed, rateLimiter, permissions, errorReport
    * Apply a simple cooldown using the core rateLimiter.
    * keyFn should return a unique key (e.g. `${module}:${cmd}:${interaction.user.id}`).
    */
-  function withCooldown(handler, { keyFn, capacity = 1, refillPerSec = 1, message = "You're doing that too much. Please slow down." } = {}) {
+  function withCooldown(
+    handler,
+    {
+      keyFn,
+      capacity = 1,
+      refillPerSec = 1,
+      message = "You're doing that too much. Please slow down.",
+    } = {}
+  ) {
     return async (interaction, ...rest) => {
       const key = keyFn ? keyFn(interaction) : null;
       if (!key) return handler(interaction, ...rest);
@@ -61,14 +77,16 @@ export function createDsl({ logger, embed, rateLimiter, permissions, errorReport
       const result = rateLimiter.take(key, { capacity, refillPerSec });
       if (!result.allowed) {
         if (interaction.isRepliable?.()) {
-          const w = embed.warn({ title: "Rate limited", description: message });
+          const w = embed.warn({ title: 'Rate limited', description: message });
           try {
             if (interaction.replied || interaction.deferred) {
               await interaction.followUp({ embeds: [w], ephemeral: true });
             } else {
               await interaction.reply({ embeds: [w], ephemeral: true });
             }
-          } catch {}
+          } catch (err) {
+            logger?.warn?.('errorReporter.report failed', err);
+          }
         }
         return;
       }
@@ -92,15 +110,19 @@ export function createDsl({ logger, embed, rateLimiter, permissions, errorReport
    * Usage:
    *   .onButton("delete", dsl.withConfirmation("Are you sure?", handler, { confirmLabel, cancelLabel }))
    */
-  function withConfirmation(prompt, handler, { confirmLabel = "Confirm", cancelLabel = "Cancel", ephemeral = true } = {}) {
+  function withConfirmation(
+    prompt,
+    handler,
+    { confirmLabel = 'Confirm', cancelLabel = 'Cancel', ephemeral = true } = {}
+  ) {
     return async (interaction) => {
       try {
         const components = [
           {
             type: 1,
             components: [
-              { type: 2, style: 3, label: confirmLabel, custom_id: "dsl_confirm" },
-              { type: 2, style: 4, label: cancelLabel, custom_id: "dsl_cancel" },
+              { type: 2, style: 3, label: confirmLabel, custom_id: 'dsl_confirm' },
+              { type: 2, style: 4, label: cancelLabel, custom_id: 'dsl_cancel' },
             ],
           },
         ];
@@ -116,26 +138,30 @@ export function createDsl({ logger, embed, rateLimiter, permissions, errorReport
         }
         const filter = (i) =>
           i.user?.id === interaction.user?.id &&
-          (i.customId === "dsl_confirm" || i.customId === "dsl_cancel");
+          (i.customId === 'dsl_confirm' || i.customId === 'dsl_cancel');
         const msg = interaction.message || (await interaction.fetchReply?.());
         const collector = msg?.createMessageComponentCollector?.({ time: 15000, max: 1, filter });
         if (!collector) return;
 
         await new Promise((resolve) => {
-          collector.on("collect", async (i) => {
+          collector.on('collect', async (i) => {
             try {
-              if (i.customId === "dsl_confirm") {
+              if (i.customId === 'dsl_confirm') {
                 await handler(i);
               } else {
-                try { await i.update?.({ content: "Cancelled.", components: [] }); } catch {}
+                try {
+                  await i.update?.({ content: 'Cancelled.', components: [] });
+                } catch (err) { void err; }
               }
             } finally {
               resolve();
             }
           });
-          collector.on("end", async (collected) => {
+          collector.on('end', async (collected) => {
             if (!collected?.size) {
-              try { await interaction.editReply?.({ components: [] }); } catch {}
+              try {
+                await interaction.editReply?.({ components: [] });
+              } catch (err) { void err; }
             }
           });
         });
@@ -157,24 +183,32 @@ export function createDsl({ logger, embed, rateLimiter, permissions, errorReport
         try {
           const res = await pre(interaction);
           if (res === true) continue;
-          const reason = typeof res === "string" ? res : "You are not allowed to perform this action.";
+          const reason =
+            typeof res === 'string' ? res : 'You are not allowed to perform this action.';
           // i18n-aware message if available
           const locale = interaction.locale || interaction.guild?.preferredLocale;
           const msg = i18n?.safeT?.(reason, { defaultValue: reason, locale }) ?? reason;
           if (interaction.isRepliable?.()) {
-            const w = embed.warn({ title: "Not allowed", description: msg });
+            const w = embed.warn({ title: 'Not allowed', description: msg });
             try {
               if (interaction.replied || interaction.deferred) {
                 await interaction.followUp({ embeds: [w], ephemeral: true });
               } else {
                 await interaction.reply({ embeds: [w], ephemeral: true });
               }
-            } catch {}
+            } catch (err) {
+              logger?.warn?.('errorReporter.report failed', err);
+            }
           }
           return;
         } catch (err) {
           logger.warn(`precondition error: ${err?.message}`);
-          try { await errorReporter?.report(err, { scope: "precondition", interactionName: getInteractionName(interaction) }); } catch {}
+          try {
+            await errorReporter?.report(err, {
+              scope: 'precondition',
+              interactionName: getInteractionName(interaction),
+            });
+          } catch (err) { void err; }
           return;
         }
       }
@@ -189,8 +223,8 @@ export function createDsl({ logger, embed, rateLimiter, permissions, errorReport
       if (i?.isButton?.()) return `button:${i.customId}`;
       if (i?.isAnySelectMenu?.()) return `select:${i.customId}`;
       if (i?.type === 5 /* ModalSubmit */) return `modal:${i.customId}`;
-    } catch {}
-    return "interaction";
+    } catch (err) { void err; }
+    return 'interaction';
   }
 
   return {

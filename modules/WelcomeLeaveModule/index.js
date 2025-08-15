@@ -27,8 +27,8 @@ export default async function init(ctx) {
 
   // Lifecycle disposal
   lifecycle.addDisposable(() => {
-    for (const d of disposers) { try { d?.(); } catch {} }
-    try { ctx.interactions?.removeModule?.(moduleName); } catch {}
+    for (const d of disposers) { try { d?.(); } catch (err) { void err; } }
+    try { ctx.interactions?.removeModule?.(moduleName); } catch (err) { void err; }
   });
 
   return {
@@ -39,7 +39,7 @@ export default async function init(ctx) {
     },
     dispose: async () => {
       logger.info("[WelcomeLeave] Module unloaded.");
-      for (const d of disposers) { try { d?.(); } catch {} }
+      for (const d of disposers) { try { d?.(); } catch (err) { void err; } }
     }
   };
 }

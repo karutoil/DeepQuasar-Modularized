@@ -104,12 +104,12 @@ export async function registerTicketControlHandlers(ctx) {
     } catch (e) {
       ctx.logger.error("[Tickets] addUserSelect error", { error: e?.message, stack: e?.stack });
       if (!replied) {
-        try { await safeReply(interaction, { content: "Failed to add user. " + (e?.message || ""), flags: 64 }); } catch {}
+        try { await safeReply(interaction, { content: "Failed to add user. " + (e?.message || ""), flags: 64 }); } catch (err) { void err; }
       }
     } finally {
       // If still not replied, send a fallback
       if (!replied) {
-        try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch {}
+        try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch (err) { void err; }
       }
     }
   }, { prefix: true });
@@ -199,12 +199,12 @@ export async function registerTicketControlHandlers(ctx) {
     } catch (e) {
       ctx.logger.error("[Tickets] transferSelect error", { error: e?.message, stack: e?.stack });
       if (!replied) {
-        try { await safeReply(interaction, { content: "Transfer failed. " + (e?.message || ""), flags: 64 }); } catch {}
+        try { await safeReply(interaction, { content: "Transfer failed. " + (e?.message || ""), flags: 64 }); } catch (err) { void err; }
       }
     } finally {
       // If still not replied, send a fallback
       if (!replied) {
-        try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch {}
+        try { await safeReply(interaction, { content: "This interaction failed due to an unknown error.", flags: 64 }); } catch (err) { void err; }
       }
     }
   }, { prefix: true });
@@ -580,7 +580,7 @@ export async function registerTicketControlHandlers(ctx) {
                 url: transcript.url,
               });
             }
-          } catch {}
+          } catch (err) { void err; }
 
           await safeReply(interaction, { content: `Transcript generated: ${transcript.url}`, ephemeral: true });
         } else {
@@ -880,7 +880,7 @@ export async function registerTicketControlHandlers(ctx) {
               userId: interaction.user.id,
             });
           }
-        } catch {}
+        } catch (err) { void err; }
 
         await safeReply(interaction, { content: "Ticket reopened. Channel will be restored by staff flow.", ephemeral: true });
       } catch (e) {
@@ -891,13 +891,13 @@ export async function registerTicketControlHandlers(ctx) {
 
   lifecycle.addDisposable(() => {
     for (const d of disposers) {
-      try { d?.(); } catch {}
+      try { d?.(); } catch (err) { void err; }
     }
   });
 
   return () => {
     for (const d of disposers) {
-      try { d?.(); } catch {}
+      try { d?.(); } catch (err) { void err; }
     }
   };
 }

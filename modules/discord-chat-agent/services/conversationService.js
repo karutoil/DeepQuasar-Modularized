@@ -9,7 +9,7 @@ function getMongo(ctx) {
   const coreMongo = ctx?.core?.mongo || ctx?.mongo;
   if (coreMongo && typeof coreMongo.getDb === "function") return coreMongo;
   const m = createMongo(ctx.config, ctx.logger);
-  try { ctx.mongo = m; } catch {}
+  try { ctx.mongo = m; } catch (err) { void err; }
   return m;
 }
 

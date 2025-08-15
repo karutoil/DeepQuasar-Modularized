@@ -22,7 +22,7 @@ function getMongo(ctx) {
   if (coreMongo && typeof coreMongo.getDb === "function") return coreMongo;
   // Fallback creation (will share process-wide if config same)
   const m = createMongo(ctx.config, ctx.logger);
-  try { ctx.mongo = m; } catch {} // Attach to ctx for future use in this module
+  try { ctx.mongo = m; } catch (err) { void err; } // Attach to ctx for future use in this module
   return m;
 }
 

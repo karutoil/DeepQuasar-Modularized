@@ -17,7 +17,7 @@ try {
   const stderrEE = /** @type {any} */ (process.stderr);
   if (stdoutEE?.setMaxListeners) stdoutEE.setMaxListeners(200);
   if (stderrEE?.setMaxListeners) stderrEE.setMaxListeners(200);
-} catch {}
+} catch (err) { void err; }
 
 
 const __filename = fileURLToPath(import.meta.url);

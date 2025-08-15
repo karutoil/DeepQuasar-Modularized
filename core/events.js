@@ -44,7 +44,7 @@ export function createEvents(client, logger) {
       if (rec.event === event && rec.handler === handler) {
         try {
           rec.emitter.off(rec.event, rec.handler);
-        } catch {}
+        } catch (err) { void err; }
         arr.splice(i, 1);
       }
     }
@@ -60,7 +60,7 @@ export function createEvents(client, logger) {
     }
     track(moduleName, emitter, event, wrapped, !!once);
     return () => {
-      try { emitter.off(event, wrapped); } catch {}
+      try { emitter.off(event, wrapped); } catch (err) { void err; }
     };
   }
 
@@ -70,7 +70,7 @@ export function createEvents(client, logger) {
     for (const rec of arr) {
       try {
         rec.emitter.off(rec.event, rec.handler);
-      } catch {}
+      } catch (err) { void err; }
     }
     listenersByModule.delete(moduleName);
   }

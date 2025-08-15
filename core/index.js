@@ -220,7 +220,7 @@ export function createCore(client, baseLoggerLevel = "info") {
           register(builder) {
             const { off } = builder.register({ ...this, ...{ commands, interactions, logger: log, t } }, moduleName, { stateManager: state });
             const unregister = builders.add(moduleName, builder);
-            lifecycle.addDisposable(() => { try { off?.(); } catch {} try { unregister?.(); } catch {} });
+            lifecycle.addDisposable(() => { try { off?.(); } catch (err) { void err; } try { unregister?.(); } catch (err) { void err; } });
             return off;
           }
         }

@@ -47,9 +47,9 @@ export default async function init(ctx) {
 
   // Lifecycle disposal
   lifecycle.addDisposable(() => {
-    try { stopTicketJobs?.(); } catch {}
-    for (const d of disposers) { try { d?.(); } catch {} }
-    try { interactions?.removeModule?.(moduleName); } catch {}
+    try { stopTicketJobs?.(); } catch (err) { void err; }
+    for (const d of disposers) { try { d?.(); } catch (err) { void err; } }
+    try { interactions?.removeModule?.(moduleName); } catch (err) { void err; }
   });
 
   //logger.info("[Tickets] Module loaded.");
@@ -61,8 +61,8 @@ export default async function init(ctx) {
     },
     dispose: async () => {
       logger.info("[Tickets] Module unloaded.");
-      try { stopTicketJobs?.(); } catch {}
-      for (const d of disposers) { try { d?.(); } catch {} }
+      try { stopTicketJobs?.(); } catch (err) { void err; }
+      for (const d of disposers) { try { d?.(); } catch (err) { void err; } }
     }
   };
 }

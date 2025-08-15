@@ -32,14 +32,14 @@ export default async function init(ctx) {
 
   // Lifecycle disposal
   lifecycle.addDisposable(() => {
-    try { disposer?.(); } catch {}
+    try { disposer?.(); } catch (err) { void err; }
     // Clear all pending timers
     try {
       for (const [, timeoutId] of timers) {
         clearTimeout(timeoutId);
       }
       timers.clear();
-    } catch {}
+    } catch (err) { void err; }
   });
 
   //logger.info("[Autorole] Module loaded.");
@@ -48,11 +48,11 @@ export default async function init(ctx) {
     description: "Automatically assign a configured role to new members with optional delay and account age gating.",
     dispose: async () => {
       logger.info("[Autorole] Module unloaded.");
-      try { disposer?.(); } catch {}
+      try { disposer?.(); } catch (err) { void err; }
       try {
         for (const [, timeoutId] of timers) clearTimeout(timeoutId);
         timers.clear();
-      } catch {}
+      } catch (err) { void err; }
     }
   };
 }

@@ -76,13 +76,13 @@ export function createConfigureCommand(ctx) {
         lifecycle.addDisposable(() => {
           try {
             clearSession(msg.id);
-          } catch {}
+          } catch (err) { void err; }
         });
       } catch (e) {
         logger.warn('[Autorole] open configure failed', { error: e?.message || e });
         try {
           await interaction.reply({ content: 'Error opening configuration.', ephemeral: true });
-        } catch {}
+        } catch (err) { void err; }
       }
     });
 
@@ -90,7 +90,7 @@ export function createConfigureCommand(ctx) {
   lifecycle.addDisposable(() => {
     try {
       off?.();
-    } catch {}
+    } catch (err) { void err; }
   });
 
   // Component handlers via core interactions
@@ -240,7 +240,7 @@ export function createConfigureCommand(ctx) {
           await setGuildSettings(ctx, cur.guildId, toSave);
           try {
             ctx.autorole?.invalidate?.(cur.guildId);
-          } catch {}
+          } catch (err) { void err; }
           const savedView = buildConfigEmbed(interaction.guild, { ...toSave });
           // Clear session on save
           clearSession(msgId);
@@ -268,7 +268,7 @@ export function createConfigureCommand(ctx) {
         if (interaction.isRepliable?.()) {
           try {
             await interaction.reply({ content: 'Interaction failed.', ephemeral: true });
-          } catch {}
+          } catch (err) { void err; }
         }
       }
     });

@@ -69,7 +69,7 @@ export function createTicketScheduler(ctx, scheduler) {
                 } else {
                   await opener.send(`Your ticket has been closed due to inactivity.`);
                 }
-              } catch {}
+              } catch (err) { void err; }
 
               // Delete channel after closing if still exists
               if (channel && channel.deletable) {
@@ -89,12 +89,12 @@ export function createTicketScheduler(ctx, scheduler) {
 
   const stopAll = () => {
     for (const stop of stops) {
-      try { stop?.(); } catch {}
+      try { stop?.(); } catch (err) { void err; }
     }
   };
 
   lifecycle?.addDisposable?.(() => {
-    try { stopAll(); } catch {}
+    try { stopAll(); } catch (err) { void err; }
   });
 
   return stopAll;

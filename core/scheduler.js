@@ -29,7 +29,7 @@ export function createScheduler(logger) {
       try {
         job.stop();
         jobs.delete(job);
-      } catch {}
+      } catch (err) { void err; }
     };
   }
 
@@ -37,7 +37,7 @@ export function createScheduler(logger) {
     for (const job of jobs) {
       try {
         job.stop();
-      } catch {}
+      } catch (err) { void err; }
     }
     jobs.clear();
   }

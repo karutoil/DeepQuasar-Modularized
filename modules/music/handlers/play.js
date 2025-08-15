@@ -102,14 +102,14 @@ export function createPlayCommand(ctx) {
       }
 
       // determine if query is a direct URL to use a faster loader
-      function isUrl(str) {
+      const isUrl = (str) => {
         try {
           const u = new URL(str);
           return !!u.protocol;
         } catch (e) {
           return false;
         }
-      }
+      };
 
       const source = isUrl(query) ? 'yt' : 'ytsearch';
 
@@ -139,7 +139,7 @@ export function createPlayCommand(ctx) {
       if (!res || !res.tracks.length) {
         return interaction.editReply({
           embeds: [
-            embed.error(`No results found for 
+            embed.error(`No results found for
 ${query}
 .`),
           ],

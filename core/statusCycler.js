@@ -3,7 +3,8 @@
 import fs from 'fs';
 import path from 'path';
 import * as scheduler from './scheduler.js'; // Optional, fallback to setInterval if not present
-import * as logger from './logger.js';
+import { getLogger } from './logger.js';
+const logger = getLogger();
 
 /**
  * Initializes the Discord bot status cycler.
@@ -94,10 +95,7 @@ function initStatusCycler(client, options = {}) {
   ];
 
   // Merge user-provided and default definitions
-  const allStatusDefinitions = [
-    ...statusDefinitions,
-    ...defaultStatusDefinitions,
-  ];
+  const allStatusDefinitions = [...statusDefinitions, ...defaultStatusDefinitions];
 
   let currentIndex = 0;
   let timer = null;
@@ -106,14 +104,13 @@ function initStatusCycler(client, options = {}) {
     const def = allStatusDefinitions[currentIndex % allStatusDefinitions.length];
     let message = '';
     try {
-      message = typeof def.getMessage === 'function'
-        ? await def.getMessage()
-        : String(def.getMessage);
+      message =
+        typeof def.getMessage === 'function' ? await def.getMessage() : String(def.getMessage);
     } catch (err) {
       logger.error('[StatusCycler] Error getting status message:', err);
       message = 'Status error';
     }
-  
+
     // Discord.js v14: client.user.setActivity
     const activityOptions = {
       name: message,
@@ -122,10 +119,10 @@ function initStatusCycler(client, options = {}) {
     if (def.type === 'Streaming' && def.url) {
       activityOptions.url = def.url;
     }
-  
+
     // Debug logging
-/*     logger.log('[StatusCycler] Attempting to set activity:', activityOptions); */
-  
+    /*     logger.log('[StatusCycler] Attempting to set activity:', activityOptions); */
+
     if (client.user) {
       // Prefer v14 setPresence API
       if (typeof client.user.setPresence === 'function') {
@@ -147,7 +144,7 @@ function initStatusCycler(client, options = {}) {
     } else {
       logger.error('[StatusCycler] client.user not available.');
     }
-  
+
     currentIndex = (currentIndex + 1) % allStatusDefinitions.length;
   }
 

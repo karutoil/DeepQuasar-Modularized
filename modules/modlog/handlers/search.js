@@ -50,7 +50,7 @@ export function createSearchHandler(ctx) {
             await interaction.reply({ content: "An error occurred while processing search.", ephemeral: true });
           }
         }
-      } catch {}
+      } catch (err) { void err; }
     }
   }
 
@@ -108,7 +108,7 @@ export function createSearchHandler(ctx) {
             await interaction.reply({ embeds: [detail], components: [row], ephemeral: true });
           }
         } catch (e) {
-          try { await interaction.reply({ embeds: [detail], components: [row], ephemeral: true }); } catch {}
+          try { await interaction.reply({ embeds: [detail], components: [row], ephemeral: true }); } catch (err) { void err; }
         }
         return;
       }
@@ -135,7 +135,7 @@ export function createSearchHandler(ctx) {
           await interaction.update({ embeds, components });
         } catch (e) {
           logger.warn("[ModLog] back button update failed, replying instead", { error: e?.message });
-          try { await interaction.reply({ embeds, components, ephemeral: true }); } catch {}
+          try { await interaction.reply({ embeds, components, ephemeral: true }); } catch (err) { void err; }
         }
         return;
       }
@@ -165,11 +165,11 @@ export function createSearchHandler(ctx) {
         }
       } catch (e) {
         logger.warn("[ModLog] pagination update failed, replying instead", { error: e?.message });
-        try { await interaction.reply({ embeds, components, ephemeral: true }); } catch {}
+        try { await interaction.reply({ embeds, components, ephemeral: true }); } catch (err) { void err; }
       }
     } catch (err) {
       logger.error("[ModLog] pagination handler error", { error: err?.message, stack: err?.stack });
-      try { await interaction.reply({ content: "Pagination failed.", ephemeral: true }); } catch {}
+      try { await interaction.reply({ content: "Pagination failed.", ephemeral: true }); } catch (err) { void err; }
     }
   }
 

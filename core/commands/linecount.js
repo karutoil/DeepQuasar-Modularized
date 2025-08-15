@@ -1,7 +1,7 @@
-import { SlashCommandBuilder } from "discord.js";
-import fs from "fs";
-import path from "path";
-import readline from "readline";
+import { SlashCommandBuilder } from 'discord.js';
+import fs from 'fs';
+import path from 'path';
+import readline from 'readline';
 
 /**
  * Register the /linecount command.
@@ -18,25 +18,25 @@ import readline from "readline";
  */
 export function register(core) {
   const { commands, logger } = core;
-  const MODULE_NAME = "core-utilities";
+  const MODULE_NAME = 'core-utilities';
 
   // Register the slash command definition
   commands.registerSlash(
     MODULE_NAME,
     new SlashCommandBuilder()
-      .setName("linecount")
-      .setDescription("Count lines of .js and .cjs files in bin, core, and modules folders")
+      .setName('linecount')
+      .setDescription('Count lines of .js and .cjs files in bin, core, and modules folders')
       .setDMPermission(true)
       .toJSON()
   );
 
   // Wire the execute handler using v2 router
-  commands.v2RegisterExecute("linecount", async (interaction) => {
+  commands.v2RegisterExecute('linecount', async (interaction) => {
     try {
       await interaction.deferReply({ ephemeral: false });
 
-      const roots = ["bin", "core", "modules"];
-      const extensions = new Set([".js", ".cjs"]);
+      const roots = ['bin', 'core', 'modules'];
+      const extensions = new Set(['.js', '.cjs']);
 
       // Track stats per folder root
       const perFolder = {
@@ -46,13 +46,13 @@ export function register(core) {
       };
 
       // Walk a directory recursively and collect stats (lines/files/dirs) for matching files
-      async function walkAndCount(rootDir) {
+      const walkAndCount = async (rootDir) => {
         const absRoot = path.resolve(process.cwd(), rootDir);
         let sumLines = 0;
         let fileCount = 0;
         let dirCount = 0;
 
-        async function walk(dir) {
+        const walk = async (dir) => {
           let entries;
           try {
             entries = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -70,7 +70,15 @@ export function register(core) {
             if (ent.isDirectory()) {
               const base = ent.name;
               // Skip common irrelevant/huge directories
-              if (base === "node_modules" || base === ".git" || base === "dist" || base === "build" || base === "coverage" || base === ".next" || base === ".turbo") {
+              if (
+                base === 'node_modules' ||
+                base === '.git' ||
+                base === 'dist' ||
+                base === 'build' ||
+                base === 'coverage' ||
+                base === '.next' ||
+                base === '.turbo'
+              ) {
                 continue;
               }
               await walk(full);
@@ -82,26 +90,30 @@ export function register(core) {
               }
             }
           }
-        }
+        };
 
         await walk(absRoot);
         return { lines: sumLines, files: fileCount, dirs: dirCount };
-      }
+      };
 
-      async function countFileLines(filePath) {
+      const countFileLines = async (filePath) => {
         // Stream the file line-by-line for accurate counting across platforms
         return new Promise((resolve) => {
           let count = 0;
           const stream = fs.createReadStream(filePath);
-          stream.on("error", (err) => {
+          stream.on('error', (err) => {
             logger.warn(`linecount: failed to read ${filePath}: ${err?.message}`);
             resolve(0);
           });
           const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-          rl.on("line", () => { count++; });
-          rl.on("close", () => { resolve(count); });
+          rl.on('line', () => {
+            count++;
+          });
+          rl.on('close', () => {
+            resolve(count);
+          });
         });
-      }
+      };
 
       // Compute per-folder stats
       for (const root of roots) {
@@ -122,12 +134,12 @@ export function register(core) {
 
       // Build a rich embed
       const embed = {
-        title: "Repository Stats (.js, .cjs)",
-        description: "Recursive totals for selected roots",
-        color: 0x5865F2, // Discord blurple-ish
+        title: 'Repository Stats (.js, .cjs)',
+        description: 'Recursive totals for selected roots',
+        color: 0x5865f2, // Discord blurple-ish
         fields: [
           {
-            name: "bin",
+            name: 'bin',
             value:
               `Lines: ${perFolder.bin.lines.toLocaleString()}\n` +
               `Files: ${perFolder.bin.files.toLocaleString()}\n` +
@@ -135,7 +147,7 @@ export function register(core) {
             inline: true,
           },
           {
-            name: "core",
+            name: 'core',
             value:
               `Lines: ${perFolder.core.lines.toLocaleString()}\n` +
               `Files: ${perFolder.core.files.toLocaleString()}\n` +
@@ -143,7 +155,7 @@ export function register(core) {
             inline: true,
           },
           {
-            name: "modules",
+            name: 'modules',
             value:
               `Lines: ${perFolder.modules.lines.toLocaleString()}\n` +
               `Files: ${perFolder.modules.files.toLocaleString()}\n` +
@@ -151,7 +163,7 @@ export function register(core) {
             inline: true,
           },
           {
-            name: "Totals",
+            name: 'Totals',
             value:
               `Lines: ${totals.lines.toLocaleString()}\n` +
               `Files: ${totals.files.toLocaleString()}\n` +
@@ -161,21 +173,23 @@ export function register(core) {
         ],
         timestamp: new Date().toISOString(),
         footer: {
-          text: "linecount • includes only .js and .cjs",
+          text: 'linecount • includes only .js and .cjs',
         },
       };
 
       await interaction.editReply({ embeds: [embed] });
     } catch (err) {
       try {
-        await interaction.editReply({ content: `Error computing line counts: ${err?.message ?? "unknown error"}` });
+        await interaction.editReply({
+          content: `Error computing line counts: ${err?.message ?? 'unknown error'}`,
+        });
       } catch {
         // ignore
       }
     }
   });
 
-  logger.info("Registered /linecount command (core-utilities)");
+  logger.info('Registered /linecount command (core-utilities)');
 }
 
 export default { register };

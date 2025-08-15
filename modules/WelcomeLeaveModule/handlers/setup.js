@@ -80,7 +80,7 @@ export function registerSetupCommand(ctx) {
               : "An error occurred while opening the setup panel.")),
           ephemeral: true,
         });
-      } catch {}
+      } catch (err) { void err; }
     }
   });
 
@@ -142,13 +142,13 @@ export function registerSetupCommand(ctx) {
 
   // Track disposers for hot-reload
   lifecycle.addDisposable(() => {
-    try { disposer?.(); } catch {}
-    for (const d of disposers) { try { d?.(); } catch {} }
+    try { disposer?.(); } catch (err) { void err; }
+    for (const d of disposers) { try { d?.(); } catch (err) { void err; } }
   });
 
   return () => {
-    try { disposer?.(); } catch {}
-    for (const d of disposers) { try { d?.(); } catch {} }
+    try { disposer?.(); } catch (err) { void err; }
+    for (const d of disposers) { try { d?.(); } catch (err) { void err; } }
   };
 }
 
@@ -168,7 +168,7 @@ async function handleEmbedBuilderButton(ctx, interaction) {
         break;
       }
     }
-  } catch {}
+  } catch (err) { void err; }
   // Call the builder with the recovered type
   await handleEmbedConfigBuilder(ctx, interaction, type);
 }
@@ -396,7 +396,7 @@ async function handleToggle(ctx, interaction, type) {
           : "Failed to toggle setting.",
         ephemeral: true,
       });
-    } catch {}
+    } catch (err) { void err; }
   }
 }
 
@@ -439,7 +439,7 @@ async function handleChannelSelect(ctx, interaction, type) {
           : "Failed to set channel.",
         ephemeral: true,
       });
-    } catch {}
+    } catch (err) { void err; }
   }
 }
 
@@ -1231,7 +1231,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
               : "An error occurred in the embed builder.",
             ephemeral: true,
           });
-        } catch {}
+        } catch (err) { void err; }
       }
     });
 
@@ -1284,7 +1284,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
               : "An error occurred updating the embed.",
             ephemeral: true,
           });
-        } catch {}
+        } catch (err) { void err; }
       }
     });
 
@@ -1298,7 +1298,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
             ephemeral: true,
           });
           await showSetupPanel(ctx, interaction);
-        } catch {}
+        } catch (err) { void err; }
       }
     });
   } catch (err) {
@@ -1311,7 +1311,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
           : "Failed to open embed config.",
         ephemeral: true,
       });
-    } catch {}
+    } catch (err) { void err; }
   }
 }
 
@@ -1341,6 +1341,6 @@ async function handleSaveExit(ctx, interaction) {
           : "Failed to save settings.",
         ephemeral: true,
       });
-    } catch {}
+    } catch (err) { void err; }
   }
 }
