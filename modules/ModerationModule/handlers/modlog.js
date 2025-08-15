@@ -1,6 +1,6 @@
-import { ApplicationCommandOptionType, ChannelType, PermissionFlagsBits } from "discord.js";
+import { ApplicationCommandOptionType, ChannelType, PermissionFlagsBits } from 'discord.js';
 
-import { setModlogChannel, getModlogChannel } from "../services/guildConfigService.js";
+import { setModlogChannel, getModlogChannel } from '../services/guildConfigService.js';
 
 /**
  * /moderation modlog set <channel>
@@ -9,23 +9,25 @@ import { setModlogChannel, getModlogChannel } from "../services/guildConfigServi
 export function createModlogCommand(ctx) {
   const { v2, embed } = ctx;
 
-  const cmd = v2.createInteractionCommand()
-    .setName("moderation")
-    .setDescription("Configure or view the moderation log channel.")
+  const cmd = v2
+    .createInteractionCommand()
+    .setName('moderation')
+    .setDescription('Configure or view the moderation log channel.')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addSubcommand(sub =>
-      sub.setName("set")
-        .setDescription("Set the moderation log channel")
-        .addChannelOption(opt =>
-          opt.setName("channel")
-            .setDescription("Channel to send moderation logs to")
+    .addSubcommand((sub) =>
+      sub
+        .setName('set')
+        .setDescription('Set the moderation log channel')
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('Channel to send moderation logs to')
             .setRequired(true)
             .addChannelTypes(ChannelType.GuildText)
         )
     )
-    .addSubcommand(sub =>
-      sub.setName("show")
-        .setDescription("Show the current moderation log channel")
+    .addSubcommand((sub) =>
+      sub.setName('show').setDescription('Show the current moderation log channel')
     );
 
   cmd.onExecute(
@@ -33,23 +35,36 @@ export function createModlogCommand(ctx) {
       const sub = interaction.options.getSubcommand();
       const guildId = interaction.guild.id;
 
-      if (sub === "set") {
-        const channel = interaction.options.getChannel("channel");
+      if (sub === 'set') {
+        const channel = interaction.options.getChannel('channel');
         if (!channel || channel.type !== ChannelType.GuildText) {
-          return interaction.reply({ ephemeral: true, embeds: [embed.error("Please select a text channel.")] });
+          return interaction.reply({
+            ephemeral: true,
+            embeds: [embed.error('Please select a text channel.')],
+          });
         }
         await setModlogChannel(ctx, guildId, channel.id);
-        return interaction.reply({ ephemeral: true, embeds: [embed.success(`Moderation log channel set to <#${channel.id}>.`)] });
-      } else if (sub === "show") {
+        return interaction.reply({
+          ephemeral: true,
+          embeds: [embed.success(`Moderation log channel set to <#${channel.id}>.`)],
+        });
+      } else if (sub === 'show') {
         const channelId = await getModlogChannel(ctx, guildId);
         if (!channelId) {
-          return interaction.reply({ ephemeral: true, embeds: [embed.info("No moderation log channel is set.")] });
+          return interaction.reply({
+            ephemeral: true,
+            embeds: [embed.info('No moderation log channel is set.')],
+          });
         }
-        return interaction.reply({ ephemeral: true, embeds: [embed.info(`Current moderation log channel: <#${channelId}>`)] });
+        return interaction.reply({
+          ephemeral: true,
+          embeds: [embed.info(`Current moderation log channel: <#${channelId}>`)],
+        });
       }
     })
   );
 
+  cmd.setDefaultMemberPermissions(PermissionFlagsBits.Administrator); // ensure only admins can change modlog
   return cmd;
 }
 
@@ -64,12 +79,16 @@ export async function logModerationAction(ctx, guildId, action) {
   // Ensure per-guild log channel is present and valid
   const channelId = await getModlogChannel(ctx, guildId);
   if (!channelId) {
-    logger?.warn?.(`[Moderation] No mod log channel set for guild ${guildId}. Moderation action not logged.`);
+    logger?.warn?.(
+      `[Moderation] No mod log channel set for guild ${guildId}. Moderation action not logged.`
+    );
     return;
   }
   const channel = client.channels.cache.get(channelId);
   if (!channel || channel.guild?.id !== guildId) {
-    logger?.warn?.(`[Moderation] Mod log channel ${channelId} not found in cache or does not belong to guild ${guildId}. Moderation action not logged.`);
+    logger?.warn?.(
+      `[Moderation] Mod log channel ${channelId} not found in cache or does not belong to guild ${guildId}. Moderation action not logged.`
+    );
     return;
   }
 
@@ -81,7 +100,9 @@ export async function logModerationAction(ctx, guildId, action) {
       action.reason ? `**Reason:** ${action.reason}` : null,
       action.duration ? `**Duration:** ${action.duration} minutes` : null,
       action.index !== undefined ? `**Index:** ${action.index}` : null,
-    ].filter(Boolean).join('\n'),
+    ]
+      .filter(Boolean)
+      .join('\n'),
     timestamp: new Date(),
   });
 
