@@ -1,6 +1,6 @@
 {
   "name": "deepquasar",
-  "version": "0.54.0",
+  "version": "0.55.0",
   "description": "Fully modular Discord.js bot with isolated core, dynamic plugin modules, hot reload, CLI scaffolder, and Docker support.",
   "type": "module",
   "main": "index.js",
