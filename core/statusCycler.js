@@ -1,9 +1,11 @@
 // core/statusCycler.js
 
 import fs from 'fs';
-import path from 'path';
-import * as scheduler from './scheduler.js'; // Optional, fallback to setInterval if not present
+// path not required here
+import { fileURLToPath } from 'node:url';
+// Use native timers for the status cycler
 import { getLogger } from './logger.js';
+import { ActivityType } from 'discord.js';
 const logger = getLogger();
 
 /**
@@ -22,13 +24,15 @@ function initStatusCycler(client, options = {}) {
     interval = 30000, // 30 seconds
   } = options;
 
-  // Helper to get bot version from package.json
+  // Helper to get bot version from package.json (works in ESM)
   function getBotVersion() {
     if (version) return version;
     try {
-      const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'));
+      const pkgPath = new URL('../package.json', import.meta.url);
+      const pkg = JSON.parse(fs.readFileSync(fileURLToPath(pkgPath), 'utf8'));
       return pkg.version || 'unknown';
-    } catch {
+    } catch (err) {
+      logger.debug('[StatusCycler] getBotVersion error', err?.message || err);
       return 'unknown';
     }
   }
@@ -101,7 +105,8 @@ function initStatusCycler(client, options = {}) {
   let timer = null;
 
   async function updateStatus() {
-    const def = allStatusDefinitions[currentIndex % allStatusDefinitions.length];
+    const idx = currentIndex % allStatusDefinitions.length;
+    const def = allStatusDefinitions[idx];
     let message = '';
     try {
       message =
@@ -111,10 +116,26 @@ function initStatusCycler(client, options = {}) {
       message = 'Status error';
     }
 
-    // Discord.js v14: client.user.setActivity
+    // Skip empty or errored messages; setting an empty activity can clear presence
+    if (!message || String(message).trim() === '' || message === 'Status error') {
+      logger.debug('[StatusCycler] Skipping empty/errored status update', { index: idx, type: def?.type, message });
+      currentIndex = (currentIndex + 1) % allStatusDefinitions.length;
+      return;
+    }
+
+    // Discord.js v14: client.user.setActivity / setPresence
+    // Normalize activity type to ActivityType enum when provided as a string
+    let activityType = def.type;
+    if (typeof def.type === 'string') {
+      // ActivityType keys are like 'Playing', 'Streaming', 'Listening', 'Watching', 'Competing'
+      activityType = ActivityType[def.type] ?? def.type;
+    }
+
+    // Truncate to a safe length for Discord presence
+    const safeMessage = String(message).slice(0, 128);
     const activityOptions = {
-      name: message,
-      type: def.type,
+      name: safeMessage,
+      type: activityType,
     };
     if (def.type === 'Streaming' && def.url) {
       activityOptions.url = def.url;
@@ -124,6 +145,7 @@ function initStatusCycler(client, options = {}) {
     /*     logger.log('[StatusCycler] Attempting to set activity:', activityOptions); */
 
     if (client.user) {
+      logger.debug('[StatusCycler] Attempting to set activity', { index: idx, activityOptions });
       // Prefer v14 setPresence API
       if (typeof client.user.setPresence === 'function') {
         try {
@@ -148,15 +170,21 @@ function initStatusCycler(client, options = {}) {
     currentIndex = (currentIndex + 1) % allStatusDefinitions.length;
   }
 
-  // Use scheduler if available, else setInterval
-  if (typeof scheduler?.setInterval === 'function') {
-    timer = scheduler.setInterval(updateStatus, interval);
-  } else {
-    timer = setInterval(updateStatus, interval);
-  }
+  // Only start the interval and do an initial update after the client is ready.
+  const start = () => {
+    // Initial immediate update
+    void updateStatus();
 
-  // Initial status update after client is fully ready
-  client.once('ready', updateStatus);
+    // Start native interval timer
+    timer = setInterval(updateStatus, interval);
+  };
+
+  if (client?.isReady && client.isReady()) {
+    // Already ready
+    start();
+  } else if (client && typeof client.once === 'function') {
+    client.once('ready', start);
+  }
 
   // Return a handle for future extensibility (e.g., to add/remove status messages)
   return {

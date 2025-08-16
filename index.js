@@ -85,7 +85,7 @@ async function main() {
   // --- Shutdown Logic ---
   let isShuttingDown = false;
   let shutdownTimeout;
-  let statusCyclerStop = null; // Will be set after initStatusCycler
+  let statusCyclerHandle = null; // Will be set after initStatusCycler
   const SHUTDOWN_TIMEOUT_MS = 15000;
 
   async function shutdown(reason = "unknown") {
@@ -105,8 +105,8 @@ async function main() {
     // 1. Stop status cycler
     cleanupSteps.push((async () => {
       try {
-        if (typeof statusCyclerStop === "function") {
-          await statusCyclerStop();
+        if (statusCyclerHandle && typeof statusCyclerHandle.stop === 'function') {
+          await statusCyclerHandle.stop();
           logger.info("[Shutdown] Status cycler stopped.");
         }
       } catch (e) {
@@ -327,8 +327,8 @@ async function main() {
 
     // Start status cycler after bot is ready
     // Save the stop function for shutdown
-    // initStatusCycler returns an object with stop() method
-    statusCyclerStop = initStatusCycler(client, { moduleStates }).stop;
+  // initStatusCycler returns an object with stop() method
+  statusCyclerHandle = initStatusCycler(client, { moduleStates });
   });
 
   await loadAllModules();
