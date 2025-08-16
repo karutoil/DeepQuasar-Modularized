@@ -1,6 +1,6 @@
 {
-  "name": "modular-discord-bot",
-  "version": "0.1.0",
+  "name": "deepquasar",
+  "version": "0.54.0",
   "description": "Fully modular Discord.js bot with isolated core, dynamic plugin modules, hot reload, CLI scaffolder, and Docker support.",
   "type": "module",
   "main": "index.js",
@@ -20,6 +20,7 @@
     "lint": "eslint . --ext .js,.cjs,.mjs || true",
     "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix || true",
     "prepare": "node -e \"\"",
+    "install-git-hooks": "node ./bin/install-git-hooks.js",
     "clear": "node bin/clear-commands.js",
     "migrate:tempvc": "node ./bin/migrate-tempvc-v1.js"
   },

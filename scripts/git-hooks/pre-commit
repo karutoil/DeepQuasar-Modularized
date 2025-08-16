@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Pre-commit hook: bump package.json patch version and stage it so it is included in the commit.
+ROOT_DIR="$(cd "$(dirname "$0")/../../" && pwd)"
+NODE_BIN="node"
+
+# If node is not on PATH, try common locations
+if ! command -v "$NODE_BIN" >/dev/null 2>&1; then
+  if [ -x "$(which node)" ]; then
+    NODE_BIN="$(which node)"
+  fi
+fi
+
+"$NODE_BIN" "$ROOT_DIR/bin/pre-commit-bump.js"
+EXIT_CODE=$?
+if [ $EXIT_CODE -ne 0 ]; then
+  echo "pre-commit-bump failed with exit code $EXIT_CODE"
+  exit $EXIT_CODE
+fi
+
+exit 0
