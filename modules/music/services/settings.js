@@ -90,11 +90,34 @@ export async function setGuildMusicSettings(ctx, guildId, partial) {
     return await coll.updateOne({ guildId }, update, { upsert: true });
   });
 
-  // Mongo updateOne returns a result with `acknowledged` when successful.
-  if (!result || !result.acknowledged) {
+  // Mongo updateOne may return different shapes depending on the wrapper
+  // used. Accept either a top-level `acknowledged`, a nested
+  // `result.acknowledged`, or an `{ ok: true, result: { ... } }` envelope.
+  const isSuccessful = (() => {
+    if (!result) return false;
+    if (typeof result.acknowledged === 'boolean') return result.acknowledged;
+    if (result.result && typeof result.result.acknowledged === 'boolean') return result.result.acknowledged;
+    if (typeof result.ok === 'boolean' && result.ok === true) {
+      // Best-effort: if the envelope reports ok:true consider it a success
+      // especially when it also contains matched/modified counts.
+      const r = result.result || result;
+      if (
+        typeof r.matchedCount === 'number' ||
+        typeof r.modifiedCount === 'number' ||
+        typeof r.upsertedCount === 'number'
+      ) {
+        return true;
+      }
+      return true;
+    }
+    return false;
+  })();
+
+  if (!isSuccessful) {
     ctx?.logger?.error?.("[Music Settings] Failed to save music settings", { result });
     throw new Error(`Failed to save music settings: ${JSON.stringify(result)}`);
   }
+
   invalidateGuildMusicSettingsCache(guildId);
 }
 

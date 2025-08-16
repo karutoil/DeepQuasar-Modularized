@@ -116,26 +116,57 @@ export function createPlayCommand(ctx) {
       const source = isUrl(query) ? 'yt' : 'ytsearch';
 
       let res;
+
+      // Helper which retries the search once before giving up. Some underlying
+      // network requests may abort with timeouts; a single retry often helps.
+      const attemptSearch = async () => {
+        const MAX_ATTEMPTS = 2;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            return await player.search({ query, source }, interaction.user);
+          } catch (err) {
+            logger.warn(`[Music] Search attempt ${attempt} failed: ${err?.message}`);
+            if (attempt === MAX_ATTEMPTS) throw err;
+            // brief backoff before retrying
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+      };
+
       if (player.state !== 'CONNECTED') {
-        // connect and search in parallel to hide voice connection latency
+        // connect and search in parallel to hide voice connection latency. If the
+        // parallel search fails (for example due to a timeout), fall back to a
+        // sequential connect-then-search flow which is more robust.
         logger.debug(`[Music] Player not connected, connecting and searching in parallel`);
         const connectPromise = player.connect().then(() => {
           logger.debug(`[Music] Player connected to voice channel: ${voiceChannel.id}`);
         });
 
         try {
-          [res] = await Promise.all([
-            player.search({ query, source }, interaction.user),
-            connectPromise.catch((_err) => null),
-          ]);
+          [res] = await Promise.all([attemptSearch(), connectPromise.catch(() => null)]);
         } catch (err) {
-          logger.error(`[Music] Search error: ${err.message}`);
-          return interaction.editReply({
-            embeds: [embed.error(`An error occurred while searching: ${err.message}`)],
-          });
+          logger.warn(
+            `[Music] Parallel search failed (${err?.message}). Falling back to sequential connect+search.`
+          );
+          try {
+            await player.connect();
+            res = await attemptSearch();
+          } catch (err2) {
+            logger.error(`[Music] Search error: ${err2?.message}`);
+            return interaction.editReply({
+              embeds: [embed.error(`An error occurred while searching: ${err2?.message}`)],
+            });
+          }
         }
       } else {
-        res = await player.search({ query, source }, interaction.user);
+        try {
+          res = await attemptSearch();
+        } catch (err) {
+          logger.error(`[Music] Search error: ${err?.message}`);
+          return interaction.editReply({
+            embeds: [embed.error(`An error occurred while searching: ${err?.message}`)],
+          });
+        }
       }
 
       if (!res || !res.tracks.length) {
