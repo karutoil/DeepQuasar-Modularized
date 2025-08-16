@@ -86,13 +86,14 @@ export async function setGuildMusicSettings(ctx, guildId, partial) {
   const validated = GuildMusicSettingsSchema.parse(mergedSettings);
 
   const update = { $set: { ...validated, guildId } };
-  const { ok, error } = await mongo.withSchema(GuildMusicSettingsSchema, async () => {
+  const result = await mongo.withSchema(GuildMusicSettingsSchema, async () => {
     return await coll.updateOne({ guildId }, update, { upsert: true });
   });
 
-  if (!ok) {
-    ctx?.logger?.error?.("[Music Settings] Failed to save music settings", { error });
-    throw new Error(`Failed to save music settings: ${error}`);
+  // Mongo updateOne returns a result with `acknowledged` when successful.
+  if (!result || !result.acknowledged) {
+    ctx?.logger?.error?.("[Music Settings] Failed to save music settings", { result });
+    throw new Error(`Failed to save music settings: ${JSON.stringify(result)}`);
   }
   invalidateGuildMusicSettingsCache(guildId);
 }

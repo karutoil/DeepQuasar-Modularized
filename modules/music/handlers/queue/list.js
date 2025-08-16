@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType } from "discord.js";
+// ...existing code...
 import { createPaginatedEmbed } from "../../../../core/ui.js";
 
 export function createListCommand(ctx, cmdQueue) {
@@ -60,6 +60,6 @@ export function createListCommand(ctx, cmdQueue) {
 
 function formatDuration(ms) {
   const minutes = Math.floor(ms / 60000);
-  const seconds = ((ms % 60000) / 1000).toFixed(0);
-  return minutes + ":" + (seconds < 10 ? '0' : '') + seconds;
+  const seconds = Math.floor((ms % 60000) / 1000);
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 }

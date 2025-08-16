@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType } from "discord.js";
+// ...existing code...
 
 export function createSeekCommand(ctx) {
   const { v2, logger, music, embed } = ctx;
@@ -67,6 +67,6 @@ export function createSeekCommand(ctx) {
 
 function formatDuration(ms) {
   const minutes = Math.floor(ms / 60000);
-  const seconds = ((ms % 60000) / 1000).toFixed(0);
-  return minutes + ":" + (seconds < 10 ? '0' : '') + seconds;
+  const seconds = Math.floor((ms % 60000) / 1000);
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 }

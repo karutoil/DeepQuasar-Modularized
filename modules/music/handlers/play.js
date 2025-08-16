@@ -1,10 +1,10 @@
-import { ApplicationCommandOptionType, ChannelType } from 'discord.js';
+import { ChannelType, PermissionsBitField } from 'discord.js';
 import { getGuildMusicSettings } from '../services/settings.js';
 
 function formatDuration(ms) {
   const minutes = Math.floor(ms / 60000);
-  const seconds = ((ms % 60000) / 1000).toFixed(0);
-  return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+  const seconds = Math.floor((ms % 60000) / 1000);
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 }
 
 export function createPlayCommand(ctx) {
@@ -50,11 +50,13 @@ export function createPlayCommand(ctx) {
       }
     }
 
-    if (!voiceChannel.joinable) {
+    // Permission checks: ensure the bot can join and speak in the channel
+    const botPerms = voiceChannel.permissionsFor(ctx.client.user);
+    if (!botPerms || !botPerms.has([PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak])) {
       return interaction.editReply({
         embeds: [
           embed.error(
-            'I cannot join that voice channel. Please ensure I have the CONNECT permission.'
+            'I cannot join or speak in that voice channel. Please ensure I have the CONNECT and SPEAK permissions.'
           ),
         ],
       });
@@ -124,7 +126,7 @@ export function createPlayCommand(ctx) {
         try {
           [res] = await Promise.all([
             player.search({ query, source }, interaction.user),
-            connectPromise.catch((e) => null),
+            connectPromise.catch((_err) => null),
           ]);
         } catch (err) {
           logger.error(`[Music] Search error: ${err.message}`);
@@ -154,7 +156,15 @@ ${query}
       logger.debug(`[Music] Is loadType === "playlist"? ${res.loadType === 'playlist'}`);
 
       if (res.loadType === 'playlist') {
-        player.queue.add(res.tracks);
+          // Prevent extremely large playlists from being queued at once (abuse/DoS protection)
+          const MAX_PLAYLIST_TRACKS = 200;
+          let tracksToAdd = res.tracks;
+          let trimmedNotice = null;
+          if (tracksToAdd.length > MAX_PLAYLIST_TRACKS) {
+            trimmedNotice = `Playlist contains ${tracksToAdd.length} tracks — adding first ${MAX_PLAYLIST_TRACKS} tracks.`;
+            tracksToAdd = tracksToAdd.slice(0, MAX_PLAYLIST_TRACKS);
+          }
+          player.queue.add(tracksToAdd);
         logger.debug(`[Music] Playlist added with ${res.tracks.length} tracks`);
         // safe queue size detection
         const getQueueSize = (p) => {
@@ -187,9 +197,9 @@ ${i + 1}. ${t.info.title} — ${t.info.author} (${formatDuration(t.info.duration
             )
             .join('');
           const totalMs = res.tracks.reduce((acc, t) => acc + (Number(t.info.duration) || 0), 0);
-          playlistEmbed.setDescription(
-            `${firstThree}\n\nTotal duration: ${formatDuration(totalMs)}`
-          );
+            let desc = `${firstThree}\n\nTotal duration: ${formatDuration(totalMs)}`;
+            if (trimmedNotice) desc = `${trimmedNotice}\n\n${desc}`;
+            playlistEmbed.setDescription(desc);
         } catch (e) {
           // ignore and keep simple message
         }
