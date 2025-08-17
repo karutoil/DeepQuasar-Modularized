@@ -111,11 +111,12 @@ export function createCore(client, baseLoggerLevel = "info") {
 
   const bus = createBus(logger);
   const commands = createCommandHandler(client, logger, config);
-  const interactions = createInteractions(client, logger);
-  const events = createEvents(client, logger);
   const embed = createEmbed(config);
+  const permissions = createPermissions(embed, logger, client);
+  const interactions = createInteractions(client, logger, { permissions, embed });
+  const events = createEvents(client, logger);
   const rateLimiter = createRateLimiter(logger);
-  const permissions = createPermissions(embed, logger);
+  
   const http = createHttp(config, logger);
   const ids = createIds();
   const metrics = createMetrics(logger);

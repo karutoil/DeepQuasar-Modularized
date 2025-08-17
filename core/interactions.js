@@ -5,10 +5,9 @@
  */
 import {
   InteractionType,
-  ComponentType,
 } from "discord.js";
 
-export function createInteractions(client, logger) {
+export function createInteractions(client, logger, { permissions: permissionsService = null, embed: embedService = null } = {}) {
   // Registries keyed by module for cleanup
   const buttonsByModule = new Map(); // module -> Map(customId -> handler)
   const selectsByModule = new Map(); // module -> Map(customId -> handler)
@@ -100,6 +99,26 @@ export function createInteractions(client, logger) {
 
   async function dispatch(interaction) {
     try {
+      // Global command-level permission enforcement: components can be tied to a command via message.interaction
+      try {
+        if (permissionsService && typeof permissionsService.isAllowedByCommandPermissions === 'function') {
+          const res = await permissionsService.isAllowedByCommandPermissions(interaction);
+          if (!res.allowed) {
+            // Inform user they are not allowed via command-specific permissions
+            try {
+              const e = embedService ? embedService.error({ title: 'Insufficient command permission', description: 'You are not allowed to use this control.' }) : { content: 'You are not allowed to use this control.' };
+              if (interaction.replied || interaction.deferred) {
+                await interaction.followUp({ embeds: e.embed ? [e.embed] : undefined, content: e.content, ephemeral: true });
+              } else {
+                await interaction.reply({ embeds: e.embed ? [e.embed] : undefined, content: e.content, ephemeral: true });
+              }
+            } catch (err) { void err; }
+            return;
+          }
+        }
+      } catch (err) {
+        logger.warn(`command-level permission check failed: ${err?.message}`);
+      }
       // Context menus (user/message)
       if (interaction.isContextMenuCommand?.()) {
         const name = interaction.commandName;

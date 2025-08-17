@@ -6,8 +6,6 @@ import { Client, GatewayIntentBits, Partials } from "discord.js";
 import chokidar from "chokidar";
 import { createCore } from "./core/index.js";
 import { initStatusCycler } from "./core/statusCycler.js";
-import { register as registerLinecount } from "./core/commands/linecount.js";
-import { register as registerAutocompleteDebug } from "./core/commands/autocomplete-debug.js";
 
 
 
@@ -206,15 +204,35 @@ async function main() {
 
   // Register core-utility commands (e.g., /linecount) before installing commands
   try {
-    const coreCtx = core.createModuleContext("core-utilities");
-    registerLinecount(coreCtx);
-    registerAutocompleteDebug(coreCtx);
-    logger.info("Core utility commands registered");
-  } catch (err) {
-    logger.warn(`Failed to register core utility commands: ${err?.message}`);
-  }
+  // Register core-utility commands (e.g., /linecount) before installing commands
+    try {
+      const coreCtx = core.createModuleContext("core-utilities");
+      // Dynamically import optional core command modules; ignore if they don't exist
+      const linecountMod = await import("./core/commands/linecount.js").catch(() => null);
+      if (linecountMod?.register) {
+        await linecountMod.register(coreCtx);
+      } else if (linecountMod?.default) {
+        await linecountMod.default(coreCtx);
+      }
+  
+      const autocompleteMod = await import("./core/commands/autocomplete-debug.js").catch(() => null);
+      if (autocompleteMod?.register) {
+        await autocompleteMod.register(coreCtx);
+      } else if (autocompleteMod?.default) {
+        await autocompleteMod.default(coreCtx);
+      }
 
-  try {
+      const statsMod = await import("./core/commands/stats.js").catch(() => null);
+      if (statsMod?.register) {
+        await statsMod.register(coreCtx);
+      } else if (statsMod?.default) {
+        await statsMod.default(coreCtx);
+      }
+  
+      logger.info("Core utility commands registered");
+    } catch (err) {
+      logger.warn(`Failed to register core utility commands: ${err?.message}`);
+    }
     core.config.require(["DISCORD_TOKEN"]);
   } catch (err) {
     console.error(err.message);

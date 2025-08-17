@@ -235,6 +235,24 @@ const ok = await ctx.permissions.ensureInteractionPerms(i, { userPerms: ["Manage
 if (!ok) return;
 // proceed
 
+Command-level permissions (components)
+-------------------------------------
+The core now enforces application command-level permissions for component interactions too (buttons, select menus, modals) when those components were created by a command message. This means:
+
+- If a component interaction originates from a message that was produced by a slash/context command, and that command has guild-level permission overrides configured, the core will check those overrides before dispatching the component handler.
+- Modules can still explicitly call `ctx.permissions.ensureInteractionPerms(interaction, { userPerms, botPerms })` to check normal Discord permissions; that helper now also respects command-level permissions.
+
+Example (module handler):
+```javascript
+const ok = await ctx.permissions.ensureInteractionPerms(interaction, { userPerms: ['ManageGuild'] });
+if (!ok) return; // user lacks required perms or command-level permissions deny access
+// continue handling
+```
+
+Notes:
+- The check determines the originating command id via `interaction.commandId` or `interaction.message?.interaction?.commandId` for components and modals.
+- If no associated command id is found, the command-level check is skipped.
+
 
 
 Rate Limiter
