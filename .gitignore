@@ -4,3 +4,6 @@
 .vscode/**
 data/lavalink-plugins/**
 .aider*
+node_modules
+docs-site/build
+docs-site/.docusaurus
