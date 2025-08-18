@@ -10,6 +10,7 @@ export default function(mod, helpers) {
       const player = rainlink.players.get(interaction.guild.id);
       if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
       player.queue.shuffle();
+  try { helpers.getPanelManager()?.handleEvent(player, 'queueUpdated').catch(() => null); } catch (err) { /* ignore */ }
       await interaction.reply({ embeds: [embed.success({ title: "Queue shuffled." })] });
     }));
 }

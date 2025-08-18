@@ -11,6 +11,7 @@ export default function(mod, helpers) {
       if (!player) { await interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true }); return; }
       player.queue.clear();
       await player.destroy();
+  try { helpers.getPanelManager()?.handleEvent(player, 'queueUpdated').catch(() => null); } catch (err) { /* ignore */ }
       await interaction.reply({ embeds: [embed.success({ title: "Stopped and disconnected." })] });
     }));
 }

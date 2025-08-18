@@ -13,6 +13,7 @@ export default function(mod, helpers) {
       if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
       try {
         player.queue.remove(idx - 1);
+  try { helpers.getPanelManager()?.handleEvent(player, 'queueUpdated').catch(() => null); } catch (err) { /* ignore */ }
         await interaction.reply({ embeds: [embed.success({ title: `Removed track at ${idx}` })] });
       } catch (err) {
         await interaction.reply({ embeds: [embed.error({ title: "Remove failed.", description: err?.message })], ephemeral: true });

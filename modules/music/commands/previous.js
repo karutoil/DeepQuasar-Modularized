@@ -9,7 +9,8 @@ export default function(mod, helpers) {
       const rainlink = ensureRainlink();
       const player = rainlink.players.get(interaction.guild.id);
       if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
-      await player.previous();
-      await interaction.reply({ embeds: [embed.success({ title: "Playing previous track." })] });
+  await player.previous();
+  try { helpers.getPanelManager()?.handleEvent(player, 'queueUpdated').catch(() => null); } catch (err) { /* ignore */ }
+  await interaction.reply({ embeds: [embed.success({ title: "Playing previous track." })] });
     }));
 }

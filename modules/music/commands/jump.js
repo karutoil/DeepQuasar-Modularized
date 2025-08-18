@@ -15,6 +15,7 @@ export default function(mod, helpers) {
         const track = player.queue[idx - 1];
         if (!track) throw new Error('No track at that position');
         await player.play(track, { replaceCurrent: true });
+  try { helpers.getPanelManager()?.handleEvent(player, 'queueUpdated').catch(() => null); } catch (err) { /* ignore */ }
         await interaction.reply({ embeds: [embed.success({ title: `Jumped to ${idx}: ${track.title}` })] });
       } catch (err) {
         await interaction.reply({ embeds: [embed.error({ title: "Jump failed.", description: err?.message })], ephemeral: true });

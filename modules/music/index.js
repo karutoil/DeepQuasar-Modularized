@@ -123,7 +123,7 @@ export default async function init(ctx) {
         const ch = client.channels.cache.get(player.textId);
         if (ch) ch.send({ embeds: [embed.info({ title: `Queue empty — disconnecting.` })] });
         player.destroy();
-  if (panelManager) panelManager.handleEvent(player, 'queueEmpty').catch(() => null);
+  // don't touch panel on queueEmpty; panel lifecycle is tied to trackStart/trackEnd
       } catch (err) { logger.warn("queueEmpty handler error", { error: err?.message }); }
     });
 
@@ -158,11 +158,7 @@ export default async function init(ctx) {
     throw new Error('Failed to create player after retries');
   }
 
-  // Instantiate panel manager
-  try {
-    panelManager = new PanelManager(mod);
-    lifecycle.addDisposable(async () => { try { await panelManager.dispose(); } catch (err) { void err; } });
-  } catch (err) { logger.warn('Failed to create PanelManager', { error: err?.message }); }
+  // Instantiate panel manager (moved below PanelManager declaration)
 
   /** Panel manager: creates and maintains a persistent queue panel per guild when enabled.
    * Behavior:
@@ -178,47 +174,24 @@ export default async function init(ctx) {
       this.embed = ctx.embed;
       this.logger = ctx.logger;
       this.config = ctx.config;
-      this.panels = {}; // guildId -> { channelId, messageId, counter }
-      this._onMessage = this._onMessage.bind(this);
-      this.client.on('messageCreate', this._onMessage);
+    this.panels = {}; // guildId -> { channelId, messageId, counter }
     }
 
     async dispose() {
-      try { this.client.off('messageCreate', this._onMessage); } catch (err) { void err; }
       // attempt to clear in-memory panels
       this.panels = {};
     }
 
-    _onMessage(msg) {
-      try {
-        if (!msg.guildId) return;
-        const p = this.panels[msg.guildId];
-        if (!p) return;
-        if (msg.channelId !== p.channelId) return;
-        p.counter = (p.counter || 0) + 1;
-        const threshold = Number(this.config.get('MODULE_MUSIC_PANEL_REPOST_THRESHOLD') || 5);
-        if (p.counter >= threshold) {
-          this.logger.info('Reposting panel due to message threshold', { guildId: msg.guildId });
-          this.repostPanel(msg.guildId).catch(e => this.logger.warn('repostPanel failed', { error: e?.message }));
-        }
-      } catch (err) { this.logger.warn('panel message handler error', { error: err?.message }); }
-    }
-
     async onPlayerCreated(player) {
       try {
+        // No-op: panel creation is handled on trackStart only.
+        // Keep a record of origin channel if desired in-memory, but do not post here.
         const guildId = player.guildId || player.guild?.id || null;
         const originChannel = player.textId || null;
         if (!guildId || !originChannel) return;
         const s = await (await import('./services/settingsService.js')).getSettings(this.ctx, guildId);
         if (!s || !s.persistentQueuePanel || !s.persistentQueuePanel.enabled) return;
-        // if channelId not set in settings, persist origin channel
-        if (!s.persistentQueuePanel.channelId) {
-          await (await import('./services/settingsService.js')).setSettings(this.ctx, guildId, { persistentQueuePanel: { enabled: true, channelId: originChannel } });
-        }
-        // ensure panel state exists
-        const channelId = s.persistentQueuePanel.channelId || originChannel;
-        this.panels[guildId] = this.panels[guildId] || { channelId, messageId: null, counter: 0 };
-        await this._postPanelMessage(guildId, player);
+        this.panels[guildId] = this.panels[guildId] || { channelId: originChannel, messageId: null, counter: 0 };
       } catch (err) { this.logger.warn('onPlayerCreated failed', { error: err?.message }); }
     }
 
@@ -228,11 +201,50 @@ export default async function init(ctx) {
         if (!guildId) return;
         const s = await (await import('./services/settingsService.js')).getSettings(this.ctx, guildId);
         if (!s || !s.persistentQueuePanel || !s.persistentQueuePanel.enabled) return;
-        // ensure panel state
-        const channelId = s.persistentQueuePanel.channelId || player.textId;
-        this.panels[guildId] = this.panels[guildId] || { channelId, messageId: null, counter: 0 };
-        // immediate repost on important events
-        await this.repostPanel(guildId, player);
+        // Only act on trackStart (post/update) and trackEnd (delete)
+        if (reason === 'trackStart') {
+          const channelId = player.textId || (this.panels[guildId] && this.panels[guildId].channelId) || null;
+          if (!channelId) return;
+          // clear any pending update debounce for this guild since we're posting on trackStart
+          if (this.panels[guildId] && this.panels[guildId].updateTimer) {
+            clearTimeout(this.panels[guildId].updateTimer);
+            this.panels[guildId].updateTimer = null;
+          }
+          this.panels[guildId] = this.panels[guildId] || { channelId, messageId: null, counter: 0 };
+          await this.repostPanel(guildId, player);
+        } else if (reason === 'trackEnd') {
+          // delete the panel message if present
+          const p = this.panels[guildId];
+          if (!p || !p.messageId) return;
+          try {
+            const channel = this.client.channels.cache.get(p.channelId);
+            if (channel) {
+              const old = await channel.messages.fetch(p.messageId).catch(() => null);
+              if (old) await old.delete().catch(() => null);
+            }
+          } catch (err) { void err; }
+          // clear any pending update timer and remove panel entry
+          if (p.updateTimer) {
+            clearTimeout(p.updateTimer);
+            p.updateTimer = null;
+          }
+          delete this.panels[guildId];
+        }
+        else if (reason === 'queueUpdated') {
+          // Schedule a debounced delete+repost after configured delay.
+          const p = this.panels[guildId] = this.panels[guildId] || { channelId: player.textId || null, messageId: null, counter: 0 };
+          const debounceMs = Number(this.config.get('MODULE_MUSIC_PANEL_DEBOUNCE_MS') || 3000);
+          // clear existing timer
+          if (p.updateTimer) clearTimeout(p.updateTimer);
+          // schedule repost after debounce
+          p.updateTimer = setTimeout(async () => {
+            try {
+              // clear the timer ref
+              p.updateTimer = null;
+              await this.repostPanel(guildId, player);
+            } catch (err) { this.logger.warn('deferred repost failed', { error: err?.message, guildId }); }
+          }, debounceMs);
+        }
       } catch (err) { this.logger.warn('handleEvent failed', { error: err?.message }); }
     }
 
@@ -240,6 +252,13 @@ export default async function init(ctx) {
       try {
         const p = this.panels[guildId];
         if (!p) return;
+        // debounce reposts that happen in quick succession
+        const now = Date.now();
+        const debounceMs = Number(this.config.get('MODULE_MUSIC_PANEL_DEBOUNCE_MS') || 3000);
+        if (p.lastPosted && (now - p.lastPosted) < debounceMs) {
+          this.logger.info('Skipping repost due to debounce', { guildId, delta: now - p.lastPosted });
+          return;
+        }
         const channel = this.client.channels.cache.get(p.channelId);
         if (!channel) return;
         // delete old message if present
@@ -252,9 +271,10 @@ export default async function init(ctx) {
         // build embed from player if provided or try to fetch player
         const pl = player || (this.ctx.core?.rainlink?.players?.get ? this.ctx.core.rainlink.players.get(guildId) : null) || (this.ctx.rainlink?.players?.get ? this.ctx.rainlink.players.get(guildId) : null) || null;
         const embedMsg = this._buildQueueEmbed(pl);
-        const sent = await channel.send({ embeds: [embedMsg] });
-        p.messageId = sent.id;
-        p.counter = 0;
+  const sent = await channel.send({ embeds: [embedMsg] });
+  p.messageId = sent.id;
+  p.counter = 0;
+  p.lastPosted = Date.now();
       } catch (err) { this.logger.warn('repostPanel error', { error: err?.message }); }
     }
 
@@ -285,12 +305,33 @@ export default async function init(ctx) {
         const channel = this.client.channels.cache.get(p.channelId);
         if (!channel) return;
         const embedMsg = this._buildQueueEmbed(player);
+        // Prevent immediate duplicate posts
+        const now = Date.now();
+        const debounceMs = Number(this.config.get('MODULE_MUSIC_PANEL_DEBOUNCE_MS') || 3000);
+        if (p.lastPosted && (now - p.lastPosted) < debounceMs) {
+          this.logger.info('Skipping initial post due to debounce', { guildId, delta: now - p.lastPosted });
+          return;
+        }
+        // delete previous message if present
+        if (p.messageId) {
+          try {
+            const old = await channel.messages.fetch(p.messageId).catch(() => null);
+            if (old) await old.delete().catch(() => null);
+          } catch (err) { void err; }
+        }
         const sent = await channel.send({ embeds: [embedMsg] });
         p.messageId = sent.id;
         p.counter = 0;
+        p.lastPosted = Date.now();
       } catch (err) { this.logger.warn('postPanel failed', { error: err?.message }); }
     }
   }
+
+  // Instantiate panel manager after class declaration
+  try {
+    panelManager = new PanelManager(mod);
+    lifecycle.addDisposable(async () => { try { await panelManager.dispose(); } catch (err) { void err; } });
+  } catch (err) { logger.warn('Failed to create PanelManager', { error: err?.message }); }
 
   // Command builders
   // Load command builders from separate files
