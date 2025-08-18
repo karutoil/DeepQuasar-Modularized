@@ -82,7 +82,7 @@ export default async function init(ctx) {
     }
   });
 
-  logger.info("[Reminders] Module loaded.");
+  //logger.info("[Reminders] Module loaded.");
   return {
     name: moduleName,
     description: "User and channel reminders with scheduling, timezones, and recurring options.",

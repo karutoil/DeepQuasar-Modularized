@@ -7,7 +7,7 @@ import { logModerationAction } from './modlog.js';
  * Subcommands: add (ban), remove (unban)
  */
 export function createBanCommand(ctx) {
-  const { v2, embed, logger } = ctx;
+  const { v2, _embed, _logger } = ctx;
 
   const cmdBan = v2
     .createInteractionCommand()

@@ -1,6 +1,5 @@
 // ModerationModule Entry Point
 
-import { PermissionFlagsBits } from "discord.js";
 import { createConfig } from "../../core/config.js";
 
 // Handlers
@@ -15,7 +14,7 @@ import { warningService } from "./services/warningService.js";
 import { logAction } from "./services/loggingService.js";
 
 export default async function init(ctx) {
-  const { logger, v2, embed, lifecycle } = ctx;
+  const { logger, v2, _embed, lifecycle } = ctx;
   const config = ctx.config ?? createConfig();
   const moduleName = "moderation";
 

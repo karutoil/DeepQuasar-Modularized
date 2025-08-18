@@ -1,20 +1,15 @@
 // User-facing ticket creation flow: Create Ticket button and modal + channel creation
 import {
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  CategoryChannel,
   ChannelType,
   EmbedBuilder,
   ModalBuilder,
-  PermissionFlagsBits,
-  PermissionsBitField,
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
 import { getGuildSettings } from "../services/settingsService.js";
 import { createTicketDoc } from "../services/ticketService.js";
-import { ticketControlEmbed, ticketControlRows, closeReasonModal } from "../utils/components.js";
+import { ticketControlEmbed, ticketControlRows } from "../utils/components.js";
 
 export async function registerTicketInteractionHandlers(ctx) {
   const { logger, lifecycle, client, interactions } = ctx;
@@ -143,21 +138,20 @@ export async function registerTicketInteractionHandlers(ctx) {
         }
 
         // Compute channel name from global format, ignoring modal title
-        function pad2(n) { return String(n).padStart(2, "0"); }
-        function sanitizeChannelName(s) {
-          return (s || "ticket")
+        const pad2 = (n) => String(n).padStart(2, "0");
+        const sanitizeChannelName = (s) =>
+          (s || "ticket")
             .toLowerCase()
             .replace(/[^a-z0-9-]+/g, "-")
             .replace(/-+/g, "-")
             .replace(/^-+|-+$/g, "")
             .slice(0, 100) || "ticket";
-        }
-        async function nextTicketCount(ctx, guildId) {
+        const nextTicketCount = async (ctxArg, guildIdArg) => {
           try {
-            const db = await ctx.mongo.getDb();
+            const db = await ctxArg.mongo.getDb();
             const res = await db.collection("guild_ticket_counters").findOneAndUpdate(
-              { guildId },
-              { $inc: { count: 1 }, $setOnInsert: { guildId, createdAt: new Date() } },
+              { guildId: guildIdArg },
+              { $inc: { count: 1 }, $setOnInsert: { guildId: guildIdArg, createdAt: new Date() } },
               { upsert: true, returnDocument: "after" }
             );
             // driver returns {value} sometimes; normalize
@@ -165,8 +159,8 @@ export async function registerTicketInteractionHandlers(ctx) {
           } catch {
             return 1;
           }
-        }
-        function formatTicketName(fmt, ctxObj) {
+        };
+        const formatTicketName = (fmt, ctxObj) => {
           const now = new Date();
           const yyyy = String(now.getFullYear());
           const mm = pad2(now.getMonth() + 1);
@@ -190,7 +184,7 @@ export async function registerTicketInteractionHandlers(ctx) {
           out = out.replace(/\{channel_id\}/g, ctxObj.channel_id || "");
           out = out.replace(/\{ticket_id\}/g, ctxObj.ticket_id || "");
           return out;
-        }
+        };
         const count = await nextTicketCount(ctx, guildId);
         const provisional = sanitizeChannelName(
           formatTicketName(

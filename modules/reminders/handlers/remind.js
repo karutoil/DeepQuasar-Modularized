@@ -35,7 +35,7 @@ export function setup(ctx) {
         const isoTime = parsedDate.toISOString();
 
         try {
-          const reminder = await createReminder(ctx, { userId, message, time: isoTime, recurrence: null, channelId: null });
+          const _reminder = await createReminder(ctx, { userId, message, time: isoTime, recurrence: null, channelId: null });
           // Format scheduled time using Luxon
           const luxonDate = DateTime.fromJSDate(parsedDate, { zone: timezone || "UTC" });
           const absolute = luxonDate.toLocaleString(DateTime.DATETIME_FULL);

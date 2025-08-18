@@ -2,7 +2,7 @@
  * Simple token-bucket rate limiter with per-key buckets.
  * Keys can be composed like `${module}:${command}:${userId}`
  */
-export function createRateLimiter(logger) {
+export function createRateLimiter(_logger) {
   const buckets = new Map();
 
   function getBucket(key, { capacity = 3, refillPerSec = 1 } = {}) {

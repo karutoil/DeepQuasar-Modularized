@@ -11,12 +11,12 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
-import { PanelIds, TypeIds } from "../utils/ids.js";
-import { ensureIndexes as ensurePanelIndexes, createPanel, updatePanel, deletePanel, listPanels, linkMessage } from "../services/panelService.js";
+import { PanelIds } from "../utils/ids.js";
+import { ensureIndexes as ensurePanelIndexes, createPanel, updatePanel, listPanels } from "../services/panelService.js";
 import { listTypes } from "../services/typeService.js";
 
 export async function registerPanelHandlers(ctx) {
-  const { logger, lifecycle, client, interactions } = ctx;
+  const { logger, lifecycle, _client, interactions } = ctx;
   const moduleName = "tickets";
   const disposers = [];
 
@@ -36,7 +36,7 @@ export async function registerPanelHandlers(ctx) {
   disposers.push(
     interactions.registerButton(moduleName, PanelIds.Create(), async (interaction) => {
       try {
-        const { assertInGuild, requireManageGuild, safeReply } = await import("../utils/validators.js");
+        const { assertInGuild, requireManageGuild, _safeReply } = await import("../utils/validators.js");
         assertInGuild(interaction); requireManageGuild(interaction);
 
         // Prompt minimal data via modal: title, description, button label

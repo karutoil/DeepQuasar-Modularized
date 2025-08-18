@@ -142,7 +142,7 @@ export async function archiveTicket(ctx, guildId, ticketId) {
 }
 
 export async function findInactiveTickets(ctx, guildId) {
-  const { config } = ctx;
+  const { _config } = ctx;
   const db = await ctx.mongo.getDb();
   // Use per-guild configured inactivityMs; fall back to env defaults
   const settings = await getGuildSettings(ctx, guildId);

@@ -1,4 +1,3 @@
-import { ApplicationCommandOptionType } from "discord.js";
 import { logModerationAction } from "./modlog.js";
 
 /**
@@ -7,7 +6,7 @@ import { logModerationAction } from "./modlog.js";
  * Subcommands: add (mute), remove (unmute)
  */
 export function createMuteCommand(ctx) {
-  const { v2, permissions, embed, modlog, logger } = ctx;
+  const { v2, _permissions, _embed, _modlog, _logger } = ctx;
 
   const cmdMute = v2.createInteractionCommand()
     .setName("mute")
@@ -57,7 +56,7 @@ export function createMuteCommand(ctx) {
 
 // Export a direct handler for index.js
 export async function handleMute(interaction, ctx) {
-  const { permissions, embed, modlog, logger } = ctx;
+  const { _permissions, embed, _modlog, logger } = ctx;
   await interaction.deferReply({ ephemeral: true });
 
   const subcommand = interaction.options.getSubcommand();

@@ -1,5 +1,5 @@
 // Ticket scheduler wiring using core/scheduler to run inactivity warning and auto-close checks
-import { findInactiveTickets, findWarningDueTickets, markWarned, updateTicket, archiveTicket, finalizeClosed, getTicketById } from "./ticketService.js";
+import { findInactiveTickets, findWarningDueTickets, markWarned, archiveTicket, finalizeClosed } from "./ticketService.js";
 import { getGuildSettings } from "./settingsService.js";
 
 /**

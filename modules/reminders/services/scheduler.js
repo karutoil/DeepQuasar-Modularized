@@ -166,7 +166,7 @@ export function setup(ctx) {
   const stop = ctx.scheduler.schedule("*/5 * * * * *", async () => {
     await ctx.utils.safeAsync(async () => {
       const now = new Date();
-      const nextCheck = new Date(now.getTime() + 5 * 1000);
+      const _nextCheck = new Date(now.getTime() + 5 * 1000);
 
       // Fetch reminders due up to now
       const dueReminders = await getDueReminders(ctx, now);

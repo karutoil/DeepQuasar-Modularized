@@ -29,7 +29,6 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  PermissionFlagsBits,
   PermissionsBitField,
   EmbedBuilder,
 } from "discord.js";
@@ -632,7 +631,7 @@ export async function registerTicketControlHandlers(ctx) {
   );
 
   disposers.push(
-    interactions.registerModal(moduleName, "tickets:control:addUserModal:", async (interaction) => {
+    interactions.registerModal(moduleName, "tickets:control:addUserModal:", async (_interaction) => {
       // Remove modal handler for add user
     }, { prefix: true })
   );
@@ -768,7 +767,7 @@ export async function registerTicketControlHandlers(ctx) {
         }
 
         const updated = await updateTicket(ctx, interaction.guildId, ticket.ticketId, { assigneeId: meUserId });
-        const newDoc = updated?.value || updated; // handle findOneAndUpdate return vs doc
+        const _newDoc = updated?.value || updated; // handle findOneAndUpdate return vs doc
         // Update recent bot embeds to reflect assignee like transfer flow
         try {
           const channel = await interaction.client.channels.fetch(ticket.channelId).catch(() => null);

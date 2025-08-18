@@ -2,7 +2,7 @@
  * Minimal error reporting service with optional Sentry integration.
  * Provides a unified `report(error, context?)` used across core/DSL.
  */
-export function createErrorReporter({ config, logger }) {
+export function createErrorReporter({ _config, logger }) {
   async function report(error, context = {}) {
     try {
       // Always log locally

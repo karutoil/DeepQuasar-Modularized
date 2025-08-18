@@ -74,7 +74,7 @@ export default async function init(ctx) {
     logger.warn('[Leveling] Failed to register commands', { error: err?.message });
   }
 
-  logger.info('[Leveling] Module loaded.');
+  //logger.info('[Leveling] Module loaded.');
 
   return {
     name: moduleName,

@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { logModerationAction } from './modlog.js';
 
 /**
@@ -6,7 +6,7 @@ import { logModerationAction } from './modlog.js';
  * Exports createKickCommand(ctx) for registration.
  */
 export function createKickCommand(ctx) {
-  const { v2, permissions, embed, modlog, logger } = ctx;
+  const { v2, _permissions, _embed, _modlog, _logger } = ctx;
 
   const cmdKick = v2
     .createInteractionCommand()
@@ -42,7 +42,7 @@ function buildModerationDmEmbed({ action, reason, executor, server }) {
 
 // Export a direct handler for index.js
 export async function handleKick(interaction, ctx) {
-  const { permissions, embed, modlog, logger } = ctx;
+  const { _permissions, embed, _modlog, logger } = ctx;
   await interaction.deferReply({ ephemeral: true });
 
   const target = interaction.options.getUser('user');

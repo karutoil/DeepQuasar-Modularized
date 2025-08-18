@@ -4,6 +4,44 @@ import { ButtonStyle } from "discord.js";
 import { DateTime } from "luxon";
 
 export function setup(ctx) {
+  // Helper to refresh reminders list after actions
+  async function refreshReminders(interaction) {
+    const userId = interaction.user.id;
+    const timezone = await getUserTimezone(ctx, userId);
+    const reminders = await getRemindersForUser(ctx, userId);
+    if (!reminders.length) {
+      await interaction.update({ embeds: [ctx.embed.info({ title: "No reminders", description: "You have no active reminders." })], components: [] });
+      return;
+    }
+    const totalReminders = reminders.length;
+    const pages = reminders.map((rem, idx) => ({
+      title: "Reminder",
+      description: rem.message,
+      fields: [
+        {
+          name: "Time",
+          value: (() => {
+            const luxonDate = DateTime.fromISO(rem.time, { zone: timezone || "UTC" });
+            const absolute = luxonDate.toLocaleString(DateTime.DATETIME_FULL);
+            const relative = luxonDate.toRelativeCalendar();
+            const zoneDisplay = luxonDate.zoneName;
+            return `• **${absolute}** (${zoneDisplay})\n• _${relative}_`;
+          })(),
+          inline: true
+        },
+        { name: "Type", value: rem.recurrence ? `Recurring (${rem.recurrence})` : "One-time", inline: true },
+        ...(rem.channelId ? [{ name: "Channel", value: `<#${rem.channelId}>`, inline: true }] : [])
+      ],
+      footerText: `ID: ${rem._id} | Page ${idx + 1}/${totalReminders} | Total reminders: ${totalReminders}`,
+      components: [
+        // Reuse the same buildActionRow available in onExecute by calling the builder's helper via ctx.v2 when needed.
+      ]
+    }));
+    // Re-create the paginated embed UI message
+    const { message, dispose } = ctx.v2.ui.createPaginatedEmbed(ctx, ctx.v2.createInteractionCommand(), "reminders", pages, { ephemeral: true });
+    await interaction.update(message);
+    ctx.lifecycle.addDisposable(dispose);
+  }
   const builder = ctx.v2.createInteractionCommand()
     .setName("reminders")
     .setDescription("View and manage your reminders")
@@ -55,45 +93,11 @@ export function setup(ctx) {
         }));
 
         // Use paginated embed UI
-        const { message, dispose, refresh } = ctx.v2.ui.createPaginatedEmbed(ctx, builder, "reminders", pages, { ephemeral: true });
+        const { message, dispose, _refresh } = ctx.v2.ui.createPaginatedEmbed(ctx, builder, "reminders", pages, { ephemeral: true });
         await i.editReply(message);
         ctx.lifecycle.addDisposable(dispose);
 
-        // Helper to refresh reminders list after actions
-        async function refreshReminders(interaction) {
-          const userId = interaction.user.id;
-          const timezone = await getUserTimezone(ctx, userId);
-          const reminders = await getRemindersForUser(ctx, userId);
-          if (!reminders.length) {
-            await interaction.update({ embeds: [ctx.embed.info({ title: "No reminders", description: "You have no active reminders." })], components: [] });
-            return;
-          }
-          const totalReminders = reminders.length;
-          const pages = reminders.map((rem, idx) => ({
-            title: "Reminder",
-            description: rem.message,
-            fields: [
-              {
-                name: "Time",
-                value: (() => {
-                  const luxonDate = DateTime.fromISO(rem.time, { zone: timezone || "UTC" });
-                  const absolute = luxonDate.toLocaleString(DateTime.DATETIME_FULL);
-                  const relative = luxonDate.toRelativeCalendar();
-                  const zoneDisplay = luxonDate.zoneName;
-                  return `• **${absolute}** (${zoneDisplay})\n• _${relative}_`;
-                })(),
-                inline: true
-              },
-              { name: "Type", value: rem.recurrence ? `Recurring (${rem.recurrence})` : "One-time", inline: true },
-              ...(rem.channelId ? [{ name: "Channel", value: `<#${rem.channelId}>`, inline: true }] : [])
-            ],
-            footerText: `ID: ${rem._id} | Page ${idx + 1}/${totalReminders} | Total reminders: ${totalReminders}`,
-            components: [buildActionRow(rem._id)]
-          }));
-          const { message, dispose } = ctx.v2.ui.createPaginatedEmbed(ctx, builder, "reminders", pages, { ephemeral: true });
-          await interaction.update(message);
-          ctx.lifecycle.addDisposable(dispose);
-        }
+  // refreshReminders is declared in the outer scope of setup() and reused here.
       })
     ))
     // Button: Delete (with confirmation dialog)
@@ -175,7 +179,7 @@ export function setup(ctx) {
         return;
       }
       // Modal form for editing
-      const { modal, open, dispose } = ctx.v2.ui.createForm(ctx, builder, "reminders", {
+      const { _modal, open, dispose } = ctx.v2.ui.createForm(ctx, builder, "reminders", {
         title: "Edit Reminder",
         fields: [
           { customId: "message", label: "Message", style: "SHORT", required: true, value: rem.message },

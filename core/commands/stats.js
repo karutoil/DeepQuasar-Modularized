@@ -52,8 +52,7 @@ export function register(core) {
 
       // Process & system info
       const mem = process.memoryUsage();
-      const cpuUsage = process.cpuUsage();
-      const now = Date.now();
+  const cpuUsage = process.cpuUsage();
 
       // Modules: inspect modules directory
       const modulesDir = path.resolve(process.cwd(), 'modules');

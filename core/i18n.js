@@ -34,7 +34,7 @@ export function createI18n({ config, logger }) {
    * - otherwise try to infer from Discord (caller can pass it in)
    * - fallback to DEFAULT_LOCALE or "en"
    */
-  function resolveLocale({ guildId = null, userLocale = null } = {}) {
+  function resolveLocale({ _guildId = null, userLocale = null } = {}) {
     const envLocale = config.get("DEFAULT_LOCALE");
     const locale = userLocale || envLocale || defaultLocale || "en";
     return normalizeLocale(locale);

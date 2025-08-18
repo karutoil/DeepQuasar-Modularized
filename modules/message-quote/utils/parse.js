@@ -49,6 +49,6 @@ export function isOnlyLinksContent(content, parsed) {
   }
 
   // Remove whitespace and trivial punctuation around links
-  const cleaned = remainder.replace(/[\s,.;:()\[\]\-_=+*~`'"]+/g, "");
+  const cleaned = remainder.replace(/[\s,.;:()[\]\-_=+*~`'"]+/g, "");
   return cleaned.length === 0;
 }

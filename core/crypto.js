@@ -17,7 +17,7 @@ function encrypt(text) {
 
 function decrypt(encryptedText) {
     const data = Buffer.from(String(encryptedText), 'hex');
-    const salt = data.slice(0, SALT_LENGTH);
+    const _salt = data.slice(0, SALT_LENGTH);
     const iv = data.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
     const tag = data.slice(SALT_LENGTH + IV_LENGTH, SALT_LENGTH + IV_LENGTH + TAG_LENGTH);
     const encrypted = data.slice(SALT_LENGTH + IV_LENGTH + TAG_LENGTH);

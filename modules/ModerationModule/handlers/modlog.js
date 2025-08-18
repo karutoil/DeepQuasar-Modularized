@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, ChannelType, PermissionFlagsBits } from 'discord.js';
+import { ChannelType, PermissionFlagsBits } from 'discord.js';
 
 import { setModlogChannel, getModlogChannel } from '../services/guildConfigService.js';
 
@@ -75,7 +75,7 @@ export function createModlogCommand(ctx) {
  * @param {object} action - { action, targetId, moderatorId, reason, duration, index }
  */
 export async function logModerationAction(ctx, guildId, action) {
-  const { client, guildConfig, embed, logger } = ctx;
+  const { client, _guildConfig, embed, logger } = ctx;
   // Ensure per-guild log channel is present and valid
   const channelId = await getModlogChannel(ctx, guildId);
   if (!channelId) {

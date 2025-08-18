@@ -8,7 +8,7 @@ import { replacePlaceholders } from "../utils/placeholders.js";
  * @param {object} ctx - Core context (must provide logger, i18n, client)
  */
 export function registerMemberEventHandlers(ctx) {
-  const { logger, i18n, client } = ctx;
+  const { logger, _i18n, client } = ctx;
 
 
   // --- Handler: Member Join ---

@@ -10,7 +10,7 @@
  * - Maintainers: Ensure the countries-and-timezones library is up to date for accurate timezone data.
  */
 import { setUserTimezone, getUserTimezone } from "../services/timezoneService.js";
-import ct from 'countries-and-timezones';
+import { getAllTimezones } from 'countries-and-timezones';
 
 /* console.log("[TIMEZONE] Module loaded, ct library:", typeof ct); */
 
@@ -47,7 +47,7 @@ export function setup(ctx) {
           }
           
           // Validate timezone exists in the library
-          const allTimezones = ct.getAllTimezones();
+          const allTimezones = getAllTimezones();
           const tzData = allTimezones[tzInput];
           
           if (!tzData) {
@@ -104,8 +104,8 @@ export function setup(ctx) {
       const input = (focusedRaw?.value || "").toLowerCase().trim();
       //console.log("[/timezone autocomplete] Input:", input);
       
-      // Get all timezones from countries-and-timezones library
-      const allTimezones = ct.getAllTimezones();
+  // Get all timezones from countries-and-timezones library
+  const allTimezones = getAllTimezones();
       //console.log("[/timezone autocomplete] Total timezones available:", Object.keys(allTimezones).length);
       
       // Popular timezone suggestions (shown when no input)

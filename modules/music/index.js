@@ -5,7 +5,7 @@ export default async function init(ctx) {
 
   const hasFactory = typeof ctx?.createModuleContext === "function";
   const mod = hasFactory ? ctx.createModuleContext(moduleName) : ctx;
-  const { logger, config, v2, embed, dsl, lifecycle, client } = mod;
+  const { logger, config, v2, embed, _dsl, lifecycle, client } = mod;
 
   if (!config.isEnabled("MODULE_MUSIC_ENABLED", true)) {
     logger.info("MODULE_MUSIC_ENABLED=false, skipping music module");

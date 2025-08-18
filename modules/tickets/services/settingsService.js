@@ -1,7 +1,7 @@
 // Per-guild settings storage and validation for Tickets module
 // Uses core/mongo.js collections; ensures indexes; provides cached getters.
 
-import { createCore } from "../../../core/index.js"; // only for types; actual ctx provides core
+// only for types; actual ctx provides core
 
 const COLLECTION = "guild_ticket_settings";
 

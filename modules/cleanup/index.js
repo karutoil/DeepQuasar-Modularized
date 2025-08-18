@@ -1,8 +1,8 @@
 // Cleanup module for DeepQuasar
-import { PermissionFlagsBits, ChannelType } from "discord.js";
+import { PermissionFlagsBits } from "discord.js";
 
 export default async function init(ctx) {
-  const { logger, config, v2, embed, dsl, lifecycle, mongo } = ctx;
+  const { logger, config, v2, embed, dsl, lifecycle, _mongo } = ctx;
   const moduleName = "cleanup";
 
   // Feature flag
@@ -70,7 +70,7 @@ export default async function init(ctx) {
         );
     })
     // Handler
-    .onExecute(dsl.withTryCatch(async (interaction, args) => {
+    .onExecute(dsl.withTryCatch(async (interaction, _args) => {
       const sub = interaction.options.getSubcommand();
       const channel = interaction.channel;
       if (!channel || !channel.isTextBased()) {

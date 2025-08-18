@@ -41,7 +41,7 @@ export default async function init(ctx) {
     }
   });
 
-  logger.info(`[${moduleName}] Module loaded.`);
+  //logger.info(`[${moduleName}] Module loaded.`);
   return {
     name: moduleName,
     description: "A highly customizable conversational AI agent for Discord.js bots.",

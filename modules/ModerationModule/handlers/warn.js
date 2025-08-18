@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, EmbedBuilder } from "discord.js";
+import { EmbedBuilder } from "discord.js";
 import { createPaginatedEmbed } from "../../../core/ui.js";
 import { InteractionCommandBuilder } from "../../../core/builders.js";
 import { logModerationAction } from "./modlog.js";
@@ -9,8 +9,8 @@ import { logModerationAction } from "./modlog.js";
  * Subcommands: add, remove, list
  */
 export function createWarnCommand(ctx) {
-  const { v2, permissions, embed, modlog, logger, services } = ctx;
-  const warnings = services?.warnings;
+  const { v2, _permissions, _embed, _modlog, _logger, services } = ctx;
+  const _warnings = services?.warnings;
 
   const cmdWarn = v2.createInteractionCommand()
     .setName("warn")
@@ -77,7 +77,7 @@ function buildModerationDmEmbed({ action, reason, executor, server }) {
 
 // Export a direct handler for index.js
 export async function handleWarn(interaction, ctx) {
-  const { permissions, embed, modlog, logger, services } = ctx;
+  const { _permissions, embed, _modlog, logger, services } = ctx;
   const warnings = services?.warnings;
   await interaction.deferReply({ ephemeral: true });
 

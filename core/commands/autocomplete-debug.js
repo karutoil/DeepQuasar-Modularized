@@ -1,10 +1,8 @@
-import { SlashCommandBuilder } from "discord.js";
-
 /**
  * Debug command to test autocomplete functionality in the core system
  */
 export function register(core) {
-  const { commands, logger, embed, v2 } = core;
+  const { _commands, logger, embed, v2 } = core;
   const MODULE_NAME = "core-debug";
 
   // Register using v2 builder pattern to test our autocomplete fix

@@ -114,7 +114,7 @@ function sanitize(s) {
   return String(s).slice(0, 1024);
 }
 
-export function buildPaginationComponents(meta, filters, items = [], client, guild) {
+export function buildPaginationComponents(meta, filters, items = [], _client, _guild) {
   // Build distinct IDs to avoid duplicate custom_id collisions on Discord
   const prevState = { ...filters, page: Math.max(1, meta.page - 1) };
   const nextState = { ...filters, page: Math.min(meta.totalPages, meta.page + 1) };
@@ -224,7 +224,7 @@ export function buildDetailEmbed(ctx, interaction, entry) {
       // Split by lines to preserve readability
       const lines = all.split('\n');
       let part = '';
-      let partIndex = 1;
+      let _partIndex = 1;
       const parts = [];
       for (const line of lines) {
         if ((part + '\n' + line).length > maxLen) {

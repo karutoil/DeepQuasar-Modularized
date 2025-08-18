@@ -11,7 +11,7 @@ import { isOnlyLinksContent } from "./parse.js";
  * - isLikelyQuoteMessageId: lightweight heuristic to avoid quoting our own quoted messages (prevents loops when someone links our quote)
  * - isContentOnlyLinks: delegates to parse util
  */
-export function createGuards({ logger }) {
+export function createGuards({ _logger }) {
   // TTL cache for processed message IDs
   const processed = new Map(); // id -> expiresAt
   const TTL_MS = 5 * 60 * 1000; // 5 minutes

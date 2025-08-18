@@ -8,7 +8,7 @@
  */
 const _metricsRegistry = new Map();
 
-export function getMetrics(namespace, logger = console) {
+export function getMetrics(namespace, _logger = console) {
   if (_metricsRegistry.has(namespace)) {
     return _metricsRegistry.get(namespace);
   }
@@ -46,7 +46,7 @@ export function getMetrics(namespace, logger = console) {
 }
 
 export function createMetrics(logger) {
-  function counter(name) {
+  function counter(_name) {
     let value = 0;
     return {
       inc(n = 1) {
@@ -61,7 +61,7 @@ export function createMetrics(logger) {
     };
   }
 
-  function gauge(name) {
+  function gauge(_name) {
     let value = 0;
     return {
       set(v) {

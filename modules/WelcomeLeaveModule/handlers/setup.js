@@ -30,7 +30,7 @@ export function registerSetupCommand(ctx) {
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild.toString());
     // Log the full command JSON for debugging
     try {
-      logger.info("[WelcomeLeave] v2 command JSON (fixed BigInt)", { json: command.toJSON ? command.toJSON() : command });
+      logger.debug("[WelcomeLeave] v2 command JSON (fixed BigInt)", { json: command.toJSON ? command.toJSON() : command });
     } catch (e) {
       logger.warn("[WelcomeLeave] Could not stringify v2 command", { error: e?.message });
     }
@@ -60,7 +60,7 @@ export function registerSetupCommand(ctx) {
       return;
     }
     try {
-      const { assertInGuild, requireManageGuild, safeReply } = await import("../../tickets/utils/validators.js");
+      const { assertInGuild, requireManageGuild, _safeReply } = await import("../../tickets/utils/validators.js");
       assertInGuild(interaction);
       requireManageGuild(interaction);
 
@@ -572,7 +572,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
         };
 
     // Utility: Validate HTTP/HTTPS URL
-    function isValidUrl(url) {
+    const isValidUrl = (url) => {
       if (typeof url !== "string" || !url.trim()) return false;
       try {
         const u = new URL(url);
@@ -580,17 +580,17 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
       } catch {
         return false;
       }
-    }
+    };
 
     // Sanitize embed image-related fields and resolve {server.icon}
-    function sanitizeEmbedImages(embed, guild) {
+    const _sanitizeEmbedImages = (embed, guild) => {
       // Helper to resolve {server.icon}
-      function resolveServerIcon(url) {
+      const resolveServerIcon = (url) => {
         if (url === "{server.icon}" && guild && typeof guild.iconURL === "function") {
           return guild.iconURL({ extension: "png", size: 512 });
         }
         return url;
-      }
+      };
       if (embed.image && embed.image.url) {
         embed.image.url = resolveServerIcon(embed.image.url);
         if (!isValidUrl(embed.image.url)) embed.image.url = undefined;
@@ -610,8 +610,8 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
       return embed;
     }
 
-    // Helper to build the embed preview
-    function buildPreview(draft) {
+  // Helper to build the embed preview
+  const buildPreview = (draft) => {
       // Defensive: ensure all image-related fields are objects with a valid url property
       const normalized = { ...draft };
       if (typeof normalized.image === "string" && normalized.image.trim()) {
@@ -644,7 +644,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
           f.value.trim().length > 0
       );
       // --- Patch: Always resolve {server.icon} for preview embed before sending ---
-      function resolveServerIcon(url) {
+      const resolveServerIcon = (url) => {
         if (url === "{server.icon}" && interaction.guild && typeof interaction.guild.iconURL === "function") {
           const icon = interaction.guild.iconURL({ extension: "png", size: 512 });
           // Only return if it's a valid URL, else undefined
@@ -654,7 +654,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
           return undefined;
         }
         return url;
-      }
+      };
       if (embed.image && embed.image.url) {
         embed.image.url = resolveServerIcon(embed.image.url);
         if (!isValidUrl(embed.image.url)) embed.image.url = undefined;
@@ -705,7 +705,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
     // (Removed duplicate buildPreview definition to fix redeclaration error)
 
     // Helper to build the placeholder embed
-    function buildPlaceholderEmbed() {
+    const buildPlaceholderEmbed = () => {
       return new EmbedBuilder()
         .setTitle(
           (typeof i18n?.t === "function" &&
@@ -729,7 +729,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
     }
 
     // Helper to build the action rows
-    function buildRows() {
+    const buildRows = () => {
       return [
         row([
           new ButtonBuilder()
@@ -850,10 +850,10 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
       ];
     }
 
-    // Utility: Ensure at least one of content or embeds is non-empty and valid
-    function getSafeReplyOptions({ content, embeds, components, ephemeral }) {
+  // Utility: Ensure at least one of content or embeds is non-empty and valid
+  const getSafeReplyOptions = ({ content, embeds, components, ephemeral }) => {
       // Utility: Validate HTTP/HTTPS URL
-      function isValidUrl(url) {
+      const isValidUrl = (url) => {
         if (typeof url !== "string" || !url.trim()) return false;
         try {
           const u = new URL(url);
@@ -861,9 +861,9 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
         } catch {
           return false;
         }
-      }
+      };
       // Recursively sanitize embed for Discord API, always return plain object
-      function sanitizeEmbedForDiscord(embed) {
+      const sanitizeEmbedForDiscord = (embed) => {
         if (!embed || typeof embed !== "object") return embed;
         // If EmbedBuilder instance, use toJSON
         let e;
@@ -875,9 +875,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
           e = { ...embed };
         }
         // Helper: remove if contains unresolved placeholder
-        function hasPlaceholder(val) {
-          return typeof val === "string" && (val.includes("{") || val.includes("}"));
-        }
+        const hasPlaceholder = (val) => typeof val === "string" && (val.includes("{") || val.includes("}"));
         // Sanitize author.icon_url
         if (e.author && e.author.icon_url) {
           if (!isValidUrl(e.author.icon_url) || hasPlaceholder(e.author.icon_url)) delete e.author.icon_url;
@@ -905,7 +903,7 @@ async function handleEmbedConfigBuilder(ctx, interaction, type) {
           );
         }
         return e;
-      }
+      };
       // Remove empty embeds and sanitize, always return plain objects
       const validEmbeds = (embeds || [])
         .filter(

@@ -12,7 +12,7 @@ import {
   TextInputStyle,
   EmbedBuilder,
 } from "discord.js";
-import { SetupIds, PanelIds, TypeIds, Prefix } from "../utils/ids.js";
+import { SetupIds, PanelIds, TypeIds } from "../utils/ids.js";
 import { getGuildSettings, upsertGuildSettings } from "../services/settingsService.js";
 import { listPanels, updatePanel, deletePanel } from "../services/panelService.js";
 import { listTypes, createType, updateType, deleteType } from "../services/typeService.js";
@@ -40,7 +40,7 @@ export async function registerAdminMenus(ctx) {
   disposers.push(
     interactions.registerButton(moduleName, SetupIds.General(), async (interaction) => {
       try {
-        const { assertInGuild, requireManageGuild, safeReply } = await import("../utils/validators.js");
+        const { assertInGuild, requireManageGuild, _safeReply } = await import("../utils/validators.js");
         assertInGuild(interaction);
         requireManageGuild(interaction);
         await showGeneralSettings(ctx, interaction);
@@ -54,7 +54,7 @@ export async function registerAdminMenus(ctx) {
   disposers.push(
     interactions.registerButton(moduleName, SetupIds.Panels(), async (interaction) => {
       try {
-        const { assertInGuild, requireManageGuild, safeReply } = await import("../utils/validators.js");
+        const { assertInGuild, requireManageGuild, _safeReply } = await import("../utils/validators.js");
         assertInGuild(interaction);
         requireManageGuild(interaction);
         await showPanelsMenu(ctx, interaction);
@@ -68,7 +68,7 @@ export async function registerAdminMenus(ctx) {
   disposers.push(
     interactions.registerButton(moduleName, SetupIds.Types(), async (interaction) => {
       try {
-        const { assertInGuild, requireManageGuild, safeReply } = await import("../utils/validators.js");
+        const { assertInGuild, requireManageGuild, _safeReply } = await import("../utils/validators.js");
         assertInGuild(interaction);
         requireManageGuild(interaction);
         await showTypesMenu(ctx, interaction);

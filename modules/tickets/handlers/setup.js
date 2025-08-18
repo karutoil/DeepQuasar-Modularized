@@ -31,7 +31,7 @@ export function registerSetupCommand(ctx) {
     }
 
     try {
-      const { assertInGuild, requireManageGuild, safeReply } = await import(
+      const { assertInGuild, requireManageGuild, _safeReply } = await import(
         '../utils/validators.js'
       );
       assertInGuild(interaction);

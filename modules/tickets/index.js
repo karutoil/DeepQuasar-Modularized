@@ -19,7 +19,7 @@ import { ensureIndexes as ensureTypeIndexes } from "./services/typeService.js";
 import { createTicketScheduler } from "./services/scheduler.js";
 
 export default async function init(ctx) {
-  const { logger, config, lifecycle, client } = ctx;
+  const { logger, config, lifecycle, _client, interactions } = ctx;
   const moduleName = "tickets";
 
   if (!config.isEnabled("MODULE_TICKETS_ENABLED", true)) {

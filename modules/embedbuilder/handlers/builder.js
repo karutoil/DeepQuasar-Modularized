@@ -56,7 +56,7 @@ export function registerEmbedBuilder(ctx) {
       )
     )
     // Edit controls
-    .onButton("editTitle", withState(ctx, async (i, state) => {
+    .onButton("editTitle", withState(ctx, async (i, _state) => {
       const modal = b.modal(ctx, moduleName, "editTitle", "Edit Title");
       modal.addComponents(
         new (await import("discord.js")).ActionRowBuilder().addComponents(
@@ -73,7 +73,7 @@ export function registerEmbedBuilder(ctx) {
       await state.set("draft", draft);
       await reRender(ctx, b, moduleName, i, state, { text: "Updated title." });
     }))
-    .onButton("editDescription", withState(ctx, async (i, state) => {
+    .onButton("editDescription", withState(ctx, async (i, _state) => {
       const modal = b.modal(ctx, moduleName, "editDescription", "Edit Description");
       modal.addComponents(
         new (await import("discord.js")).ActionRowBuilder().addComponents(
@@ -90,7 +90,7 @@ export function registerEmbedBuilder(ctx) {
       await state.set("draft", draft);
       await reRender(ctx, b, moduleName, i, state, { text: "Updated description." });
     }))
-    .onButton("editColor", withState(ctx, async (i, state) => {
+    .onButton("editColor", withState(ctx, async (i, _state) => {
       const modal = b.modal(ctx, moduleName, "editColor", "Edit Color");
       modal.addComponents(
         new (await import("discord.js")).ActionRowBuilder().addComponents(
@@ -107,7 +107,7 @@ export function registerEmbedBuilder(ctx) {
       await state.set("draft", draft);
       await reRender(ctx, b, moduleName, i, state, { text: "Updated color." });
     }))
-    .onButton("editImages", withState(ctx, async (i, state) => {
+    .onButton("editImages", withState(ctx, async (i, _state) => {
       const modal = b.modal(ctx, moduleName, "editImages", "Edit Images");
       modal.addComponents(
         new (await import("discord.js")).ActionRowBuilder().addComponents(
@@ -129,7 +129,7 @@ export function registerEmbedBuilder(ctx) {
       await state.set("draft", draft);
       await reRender(ctx, b, moduleName, i, state, { text: "Updated images." });
     }))
-    .onButton("editFooter", withState(ctx, async (i, state) => {
+    .onButton("editFooter", withState(ctx, async (i, _state) => {
       const modal = b.modal(ctx, moduleName, "editFooter", "Edit Footer");
       modal.addComponents(
         new (await import("discord.js")).ActionRowBuilder().addComponents(
@@ -151,7 +151,7 @@ export function registerEmbedBuilder(ctx) {
       await state.set("draft", draft);
       await reRender(ctx, b, moduleName, i, state, { text: "Updated footer." });
     }))
-    .onButton("editAuthor", withState(ctx, async (i, state) => {
+    .onButton("editAuthor", withState(ctx, async (i, _state) => {
       const modal = b.modal(ctx, moduleName, "editAuthor", "Edit Author");
       modal.addComponents(
         new (await import("discord.js")).ActionRowBuilder().addComponents(
@@ -179,7 +179,7 @@ export function registerEmbedBuilder(ctx) {
       await reRender(ctx, b, moduleName, i, state, { text: "Updated author." });
     }))
     // Fields management (simple: add/replace entire field; an advanced manager can be added later)
-    .onButton("addField", withState(ctx, async (i, state) => {
+    .onButton("addField", withState(ctx, async (i, _state) => {
       const modal = b.modal(ctx, moduleName, "addField", "Add Field");
       modal.addComponents(
         new (await import("discord.js")).ActionRowBuilder().addComponents(
@@ -216,7 +216,7 @@ export function registerEmbedBuilder(ctx) {
     }))
     // Templates
     .onButton("save", ctx.dsl.withPerms(
-      withState(ctx, async (i, state) => {
+      withState(ctx, async (i, _state) => {
         const modal = b.modal(ctx, moduleName, "saveTemplate", "Save Template");
         modal.addComponents(
           new (await import("discord.js")).ActionRowBuilder().addComponents(
@@ -256,7 +256,7 @@ export function registerEmbedBuilder(ctx) {
       ),
       { userPerms: ["ManageGuild"] }
     ))
-    .onButton("load", withState(ctx, async (i, state) => {
+    .onButton("load", withState(ctx, async (i, _state) => {
       const svc = await loadTemplatesService();
       const list = await svc.list(ctx, i.guildId, 25);
       const options = list.map(t => ({ label: t.name, value: t.key }));
@@ -290,7 +290,7 @@ export function registerEmbedBuilder(ctx) {
       await reRender(ctx, b, moduleName, i, state, { text: `Loaded template '${tpl.data?.name ?? key}'.` });
     }))
     .onButton("remove", ctx.dsl.withPerms(
-      withState(ctx, async (i, state) => {
+      withState(ctx, async (i, _state) => {
         const svc = await loadTemplatesService();
         const list = await svc.list(ctx, i.guildId, 25);
         const options = list.map(t => ({ label: `Delete ${t.name}`, value: t.key }));
@@ -348,7 +348,7 @@ export function registerEmbedBuilder(ctx) {
         await i.reply({ files: [{ attachment: buf, name: "embed.json" }], ephemeral: true });
       }
     }))
-    .onButton("import", withState(ctx, async (i, state) => {
+    .onButton("import", withState(ctx, async (i, _state) => {
       const modal = b.modal(ctx, moduleName, "importJson", "Import Embed JSON");
       modal.addComponents(
         new (await import("discord.js")).ActionRowBuilder().addComponents(
@@ -443,7 +443,7 @@ export function registerEmbedBuilder(ctx) {
       { userPerms: ["ManageMessages"] }
     ))
     // Mention Roles button handler
-    .onButton("mentionRoles", withState(ctx, async (i, state) => {
+    .onButton("mentionRoles", withState(ctx, async (i, _state) => {
       // Fetch all roles in the guild, including @everyone
       const guild = i.guild ?? await i.client.guilds.fetch(i.guildId);
       let roles = [];

@@ -1,9 +1,9 @@
-import { PermissionsBitField, ChannelType } from 'discord.js';
+import { PermissionsBitField } from 'discord.js';
 import { getSettings, setSettings } from '../services/settingsService.js';
 
-export default function(mod, helpers) {
-  const { v2, lifecycle, embed } = mod;
-  const moduleName = 'music';
+export default function(mod, _helpers) {
+  const { v2, _lifecycle, embed } = mod;
+  const _moduleName = 'music';
 
   const cmd = v2.createInteractionCommand()
     .setName('settings')
@@ -62,11 +62,11 @@ export default function(mod, helpers) {
         const action = (interaction.options.getString('action') || '').toLowerCase();
         if (action === 'enable') {
           // enable persistent panel; channel will be the channel where the player is first created
-          const updated = await setSettings(mod, interaction.guildId, { persistentQueuePanel: { enabled: true, channelId: null } });
+          const _updated = await setSettings(mod, interaction.guildId, { persistentQueuePanel: { enabled: true, channelId: null } });
           return interaction.reply({ content: `Persistent queue panel enabled; it will be created in the channel where the player is first spawned.`, ephemeral: true });
         }
         if (action === 'disable') {
-          const updated = await setSettings(mod, interaction.guildId, { persistentQueuePanel: { enabled: false, channelId: null } });
+          const _updated = await setSettings(mod, interaction.guildId, { persistentQueuePanel: { enabled: false, channelId: null } });
           return interaction.reply({ content: `Persistent queue panel disabled.`, ephemeral: true });
         }
         return interaction.reply({ content: 'Invalid action. Use enable|disable', ephemeral: true });

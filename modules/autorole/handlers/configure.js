@@ -419,7 +419,7 @@ async function updateView(interaction, guild, snapshot) {
 
 // Retained for completeness, but no longer used for Save, since we rely on session state.
 // Keeping it here in case we want a fallback in the future.
-function parseEmbedState(message) {
+function _parseEmbedState(message) {
   const embed = message.embeds?.[0];
   const fields = embed?.data?.fields || embed?.fields || [];
   const map = {};

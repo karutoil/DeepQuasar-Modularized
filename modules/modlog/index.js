@@ -1,4 +1,4 @@
-import { PermissionFlagsBits, ButtonStyle, ActionRowBuilder } from 'discord.js';
+import { PermissionFlagsBits } from 'discord.js';
 import { createSearchHandler } from './handlers/search.js';
 import { createInspectHandler } from './handlers/inspect.js';
 import { buildExportHandler } from './handlers/export.js';
@@ -12,7 +12,7 @@ export default async function init(ctx) {
   const hasFactory = typeof ctx?.createModuleContext === 'function';
   const mod = hasFactory ? ctx.createModuleContext(moduleName) : ctx;
 
-  const { logger, config, lifecycle, interactions, v2, embed } = mod;
+  const { logger, config, lifecycle, interactions, v2, _embed } = mod;
 
   if (!config.isEnabled('MODULE_MODLOG_ENABLED', true)) {
     logger.info('[ModLog] Module disabled via config.');

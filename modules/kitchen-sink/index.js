@@ -36,11 +36,11 @@ export default async function init(ctx) {
     mongo,
     metrics,
     scheduler,
-    permissions,
+    _permissions,
     i18n,
-    ids,
+    _ids,
     errorReporter,
-    guildConfig,
+    _guildConfig,
   } = mod;
 
   // Feature gate
@@ -259,7 +259,7 @@ export default async function init(ctx) {
 
       // Build a form using core/ui
       const { createForm, parseModal } = await import("../../core/ui.js");
-      const { modal, open, modalId } = createForm(ctx, cmdEcho, moduleName, {
+      const { _modal, open, _modalId } = createForm(ctx, cmdEcho, moduleName, {
         title: i18n.safeT("kitchen.echo.modal_title", { defaultValue: "Echo Transformer" }),
         fields: [
           { name: "append", label: i18n.safeT("kitchen.echo.modal_field_label", { defaultValue: "Append text" }), style: "short", required: false },
@@ -429,9 +429,9 @@ export default async function init(ctx) {
             const col = await mongo.getCollection("kitchen_demo");
             const doc = { createdAt: new Date(), userId: interaction.user?.id, note: "kitchen sink demo" };
             const ins = await col.insertOne(doc);
-            const found = await col.findOne({ _id: ins.insertedId });
+            const _found = await col.findOne({ _id: ins.insertedId });
             await col.updateOne({ _id: ins.insertedId }, { $set: { note: "updated" } });
-            const del = await col.deleteOne({ _id: ins.insertedId });
+            const _del = await col.deleteOne({ _id: ins.insertedId });
             mMongoOps.inc();
 
             await interaction.editReply({

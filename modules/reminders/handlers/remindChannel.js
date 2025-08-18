@@ -42,7 +42,7 @@ export function setup(ctx) {
         }
 
         try {
-          const reminder = await createReminder(ctx, { userId, message, time: isoTime, recurrence: null, channelId: channel.id });
+          const _reminder = await createReminder(ctx, { userId, message, time: isoTime, recurrence: null, channelId: channel.id });
           await i.editReply({ embeds: [ctx.embed.success({
             title: "Channel Reminder Created",
             description: `Your reminder will be sent in <#${channel.id}> at **${isoTime}**${timezone ? " (" + timezone + ")" : ""}.\n\nMessage: ${message}`

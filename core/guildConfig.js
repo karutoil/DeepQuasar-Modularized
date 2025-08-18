@@ -4,7 +4,7 @@
  * Backed by in-memory Map by default. If a Mongo client is provided, it can be extended later.
  */
 
-export function createGuildConfig({ mongo, logger, config }) {
+export function createGuildConfig({ mongo: _mongo, logger: _logger, config: _config }) {
   // In-memory store shape:
   // guildData: Map<guildId, { locale?: string, data?: Record<string, any> }>
   const guildData = new Map();

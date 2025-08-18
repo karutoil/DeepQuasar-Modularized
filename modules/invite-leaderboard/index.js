@@ -130,7 +130,7 @@ export default async function init(ctx) {
     logger?.warn?.('[InviteLeaderboard] failed to register command', { error: err?.message });
   }
 
-  logger.info('[InviteLeaderboard] Module loaded.');
+  //logger.info('[InviteLeaderboard] Module loaded.');
 
   return {
     name: moduleName,

@@ -4,7 +4,7 @@ import { callOpenAI } from "../services/aiService.js";
 
 export function registerMessageHandler(ctx) {
   const { client, logger } = ctx;
-  const moduleName = "discord-chat-agent";
+  const _moduleName = "discord-chat-agent";
 
   async function onMessageCreate(message) {
     // Ignore bot messages to prevent loops
