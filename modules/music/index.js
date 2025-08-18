@@ -129,8 +129,20 @@ export default async function init(ctx) {
 
     lifecycle.addDisposable(async () => {
       try { rl.removeAllListeners?.(); } catch (err) { void err; }
+      // Destroy all players first (best-effort)
+      try {
+        if (rl.players && typeof rl.players.values === 'function') {
+          for (const p of rl.players.values()) {
+            try { await p.destroy?.(); } catch (err) { /* ignore per-player errors */ }
+          }
+        }
+      } catch (err) { /* ignore players iteration errors */ }
       try { await rl.destroy?.(); } catch (err) { void err; }
       state.rainlink = null; state.ready = false;
+      // Attempt to clean up any panels we know about
+      try {
+        if (panelManager && typeof panelManager.dispose === 'function') await panelManager.dispose();
+      } catch (err) { void err; }
     });
   } catch (err) {
     logger.error("Failed to initialize Rainlink", { error: err?.message });
@@ -178,7 +190,25 @@ export default async function init(ctx) {
     }
 
     async dispose() {
-      // attempt to clear in-memory panels
+      // Attempt to delete any posted panel messages and clear timers, then clear in-memory state.
+      try {
+        for (const guildId of Object.keys(this.panels)) {
+          const p = this.panels[guildId];
+          try {
+            if (p.updateTimer) {
+              clearTimeout(p.updateTimer);
+              p.updateTimer = null;
+            }
+            if (p.messageId && p.channelId) {
+              const channel = this.client.channels.cache.get(p.channelId);
+              if (channel) {
+                const old = await channel.messages.fetch(p.messageId).catch(() => null);
+                if (old) await old.delete().catch(() => null);
+              }
+            }
+          } catch (err) { /* ignore per-panel errors */ }
+        }
+      } catch (err) { this.logger.warn('PanelManager.dispose failed', { error: err?.message }); }
       this.panels = {};
     }
 
@@ -407,7 +437,17 @@ export default async function init(ctx) {
     description: "Music module powered by Rainlink",
     dispose: async () => {
       logger.info("Music module unloaded.");
-    // Rainlink cleanup handled via lifecycle disposables registered above
+      // Best-effort: destroy players and cleanup panels if lifecycle didn't already.
+      try {
+        const rl = state.rainlink || (mod.core && mod.core.rainlink) || null;
+        if (rl && rl.players && typeof rl.players.values === 'function') {
+          for (const p of rl.players.values()) {
+            try { await p.destroy?.(); } catch (err) { /* ignore */ }
+          }
+        }
+      } catch (err) { /* ignore */ }
+      try { if (panelManager && typeof panelManager.dispose === 'function') await panelManager.dispose(); } catch (err) { /* ignore */ }
+      // Rainlink cleanup handled via lifecycle disposables registered above
     }
   };
 }
