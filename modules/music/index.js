@@ -17,6 +17,8 @@ export default async function init(ctx) {
     rainlink: null,
     ready: false,
   };
+  // Panel manager will track persistent panels per guild
+  let panelManager = null;
 
   // Helpers
   function ensureRainlink() {
@@ -106,12 +108,14 @@ export default async function init(ctx) {
       try {
         const ch = client.channels.cache.get(player.textId);
         if (ch) ch.send({ embeds: [ buildTrackEmbed(track, { title: `Now playing: ${track.title}`, player }) ] });
+  if (panelManager) panelManager.handleEvent(player, 'trackStart').catch(() => null);
       } catch (err) { logger.warn("trackStart handler error", { error: err?.message }); }
     });
     rl.on("trackEnd", (player, track) => {
       try {
         const ch = client.channels.cache.get(player.textId);
         if (ch) ch.send({ embeds: [embed.info({ title: `Finished: ${track?.title ?? "track"}` })] });
+  if (panelManager) panelManager.handleEvent(player, 'trackEnd').catch(() => null);
       } catch (err) { logger.warn("trackEnd handler error", { error: err?.message }); }
     });
     rl.on("queueEmpty", (player) => {
@@ -119,6 +123,7 @@ export default async function init(ctx) {
         const ch = client.channels.cache.get(player.textId);
         if (ch) ch.send({ embeds: [embed.info({ title: `Queue empty — disconnecting.` })] });
         player.destroy();
+  if (panelManager) panelManager.handleEvent(player, 'queueEmpty').catch(() => null);
       } catch (err) { logger.warn("queueEmpty handler error", { error: err?.message }); }
     });
 
@@ -153,324 +158,208 @@ export default async function init(ctx) {
     throw new Error('Failed to create player after retries');
   }
 
-  // Command builders
-  const playCmd = v2.createInteractionCommand()
-    .setName("play")
-    .setDescription("Play a track or playlist")
-    .addStringOption(opt => opt.setName("query").setDescription("Search query or URL").setRequired(true))
-    .onExecute(dsl.withDeferredReply(dsl.withTryCatch(async (interaction, args) => {
-      const query = args.query;
-      const member = interaction.member;
-      const voiceChannel = member?.voice?.channel;
+  // Instantiate panel manager
+  try {
+    panelManager = new PanelManager(mod);
+    lifecycle.addDisposable(async () => { try { await panelManager.dispose(); } catch (err) { void err; } });
+  } catch (err) { logger.warn('Failed to create PanelManager', { error: err?.message }); }
 
-      const reply = async (payload) => {
-        try {
-          if (interaction.deferred || interaction.replied) return await interaction.followUp(payload);
-          return await interaction.reply(payload);
-        } catch (e) {
-          logger.warn("Reply failed in play handler", { error: e?.message });
+  /** Panel manager: creates and maintains a persistent queue panel per guild when enabled.
+   * Behavior:
+   * - When a player is first created, if persistent panel enabled for the guild, record origin channelId
+   *   (if not already set) and post a queue panel in that channel.
+   * - Listens for messages in the panel channel and will repost the panel after a threshold (default 5).
+   * - Also reposts on important music events (track start/end, track added, queue empty).
+   */
+  class PanelManager {
+    constructor(ctx) {
+      this.ctx = ctx;
+      this.client = ctx.client;
+      this.embed = ctx.embed;
+      this.logger = ctx.logger;
+      this.config = ctx.config;
+      this.panels = {}; // guildId -> { channelId, messageId, counter }
+      this._onMessage = this._onMessage.bind(this);
+      this.client.on('messageCreate', this._onMessage);
+    }
+
+    async dispose() {
+      try { this.client.off('messageCreate', this._onMessage); } catch (err) { void err; }
+      // attempt to clear in-memory panels
+      this.panels = {};
+    }
+
+    _onMessage(msg) {
+      try {
+        if (!msg.guildId) return;
+        const p = this.panels[msg.guildId];
+        if (!p) return;
+        if (msg.channelId !== p.channelId) return;
+        p.counter = (p.counter || 0) + 1;
+        const threshold = Number(this.config.get('MODULE_MUSIC_PANEL_REPOST_THRESHOLD') || 5);
+        if (p.counter >= threshold) {
+          this.logger.info('Reposting panel due to message threshold', { guildId: msg.guildId });
+          this.repostPanel(msg.guildId).catch(e => this.logger.warn('repostPanel failed', { error: e?.message }));
         }
-      };
+      } catch (err) { this.logger.warn('panel message handler error', { error: err?.message }); }
+    }
 
-      if (!voiceChannel) {
-        await reply({ embeds: [embed.error({ title: "You must be in a voice channel." })], ephemeral: true });
-        return;
-      }
-      if (!state.ready) {
-        await reply({ embeds: [embed.error({ title: "Music subsystem not ready." })], ephemeral: true });
-        return;
-      }
-      const rainlink = ensureRainlink();
+    async onPlayerCreated(player) {
+      try {
+        const guildId = player.guildId || player.guild?.id || null;
+        const originChannel = player.textId || null;
+        if (!guildId || !originChannel) return;
+        const s = await (await import('./services/settingsService.js')).getSettings(this.ctx, guildId);
+        if (!s || !s.persistentQueuePanel || !s.persistentQueuePanel.enabled) return;
+        // if channelId not set in settings, persist origin channel
+        if (!s.persistentQueuePanel.channelId) {
+          await (await import('./services/settingsService.js')).setSettings(this.ctx, guildId, { persistentQueuePanel: { enabled: true, channelId: originChannel } });
+        }
+        // ensure panel state exists
+        const channelId = s.persistentQueuePanel.channelId || originChannel;
+        this.panels[guildId] = this.panels[guildId] || { channelId, messageId: null, counter: 0 };
+        await this._postPanelMessage(guildId, player);
+      } catch (err) { this.logger.warn('onPlayerCreated failed', { error: err?.message }); }
+    }
 
-      async function tryCreatePlayer(opts) {
-        const maxAttempts = 4;
-        let attempt = 0;
-        while (attempt < maxAttempts) {
-          attempt += 1;
+    async handleEvent(player, reason = 'update') {
+      try {
+        const guildId = player.guildId || player.guild?.id || null;
+        if (!guildId) return;
+        const s = await (await import('./services/settingsService.js')).getSettings(this.ctx, guildId);
+        if (!s || !s.persistentQueuePanel || !s.persistentQueuePanel.enabled) return;
+        // ensure panel state
+        const channelId = s.persistentQueuePanel.channelId || player.textId;
+        this.panels[guildId] = this.panels[guildId] || { channelId, messageId: null, counter: 0 };
+        // immediate repost on important events
+        await this.repostPanel(guildId, player);
+      } catch (err) { this.logger.warn('handleEvent failed', { error: err?.message }); }
+    }
+
+    async repostPanel(guildId, player) {
+      try {
+        const p = this.panels[guildId];
+        if (!p) return;
+        const channel = this.client.channels.cache.get(p.channelId);
+        if (!channel) return;
+        // delete old message if present
+        if (p.messageId) {
           try {
-            return await rainlink.create(opts);
-          } catch (err) {
-            const msg = String(err?.message || '').toLowerCase();
-            // Retry on known race condition where server update arrives before session id
-            if ((msg.includes('missing session id') || msg.includes('session id missing') || msg.includes('missing connection endpoint')) && attempt < maxAttempts) {
-              const waitMs = 300 * attempt;
-              logger.info(`rainlink.create failed due to voice race, retrying in ${waitMs}ms (attempt ${attempt})`);
-              await new Promise(r => setTimeout(r, waitMs));
-              continue;
-            }
-            throw err;
-          }
+            const old = await channel.messages.fetch(p.messageId).catch(() => null);
+            if (old) await old.delete().catch(() => null);
+          } catch (err) { void err; }
         }
-        throw new Error('Failed to create player after retries');
-      }
+        // build embed from player if provided or try to fetch player
+        const pl = player || (this.ctx.core?.rainlink?.players?.get ? this.ctx.core.rainlink.players.get(guildId) : null) || (this.ctx.rainlink?.players?.get ? this.ctx.rainlink.players.get(guildId) : null) || null;
+        const embedMsg = this._buildQueueEmbed(pl);
+        const sent = await channel.send({ embeds: [embedMsg] });
+        p.messageId = sent.id;
+        p.counter = 0;
+      } catch (err) { this.logger.warn('repostPanel error', { error: err?.message }); }
+    }
 
-      let player;
+    _buildQueueEmbed(player) {
       try {
-        player = await tryCreatePlayer({ guildId: interaction.guild.id, textId: interaction.channel.id, voiceId: voiceChannel.id, shardId: 0, volume: config.get("MODULE_MUSIC_DEFAULT_VOLUME") ?? 100 });
-      } catch (err) {
-        await reply({ embeds: [embed.error({ title: "Failed to create player.", description: err?.message })], ephemeral: true });
-        return;
-      }
+        if (!player) return this.embed.info({ title: 'Queue', description: 'No active player.' });
+        const current = player.queue?.current;
+        const upcoming = player.queue?.slice ? player.queue.slice(0, 25) : [];
+        const fields = [];
+        if (current) {
+          fields.push({ name: 'Now Playing', value: `${current.title}\n${current.author} • ${formatDuration(current.duration)}`, inline: false });
+        }
+        if (upcoming.length) {
+          const list = upcoming.map((t, i) => `${i + 1}. ${t.title} — ${t.author} (${formatDuration(t.duration)})`).join('\n');
+          fields.push({ name: `Upcoming (${player.queue.totalSize - (current ? 1 : 0)})`, value: list, inline: false });
+        }
+        const total = player.queue?.totalSize ?? (upcoming.length + (current ? 1 : 0));
+        const qEmbed = this.embed.info({ title: `Queue (${total})`, description: '\u200b', fields });
+        if (current?.artworkUrl) qEmbed.setThumbnail(current.artworkUrl);
+        return qEmbed;
+      } catch (err) { return this.embed.info({ title: 'Queue', description: 'Error building queue.' }); }
+    }
 
-      const result = await rainlink.search(query, { requester: interaction.user });
-      if (!result.tracks.length) {
-        await reply({ embeds: [embed.info({ title: "No results found." })], ephemeral: true });
-        return;
-      }
-      if (result.type === "PLAYLIST") {
-        for (const t of result.tracks) player.queue.add(t);
-        const e = embed.success({ title: `Queued playlist: ${result.playlistName}`, description: `Queued ${result.tracks.length} tracks.` });
-        await reply({ embeds: [e] });
-      } else {
-        const track = result.tracks[0];
-        player.queue.add(track);
-        const e = buildTrackEmbed(track, { title: `Queued: ${track.title}` });
-        await reply({ embeds: [e] });
-      }
-      if (!player.playing || player.paused) player.play();
-    })));
-
-  const skipCmd = v2.createInteractionCommand()
-    .setName("skip")
-    .setDescription("Skip the current track")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
+    async _postPanelMessage(guildId, player) {
       try {
-        const rainlink = ensureRainlink();
-        const player = rainlink.players.get(interaction.guild.id);
-        if (!player) { await interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true }); return; }
-        player.stop();
-        await interaction.reply({ embeds: [embed.success({ title: "Skipped." })] });
-      } catch (err) { await interaction.reply({ embeds: [embed.error({ title: "Error skipping.", description: err?.message })], ephemeral: true }); }
-    }));
+        const p = this.panels[guildId];
+        if (!p) return;
+        const channel = this.client.channels.cache.get(p.channelId);
+        if (!channel) return;
+        const embedMsg = this._buildQueueEmbed(player);
+        const sent = await channel.send({ embeds: [embedMsg] });
+        p.messageId = sent.id;
+        p.counter = 0;
+      } catch (err) { this.logger.warn('postPanel failed', { error: err?.message }); }
+    }
+  }
 
-  const pauseCmd = v2.createInteractionCommand()
-    .setName("pause")
-    .setDescription("Pause playback")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) { await interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true }); return; }
-      player.pause(true);
-      await interaction.reply({ embeds: [embed.success({ title: "Paused." })] });
-    }));
-
-  const resumeCmd = v2.createInteractionCommand()
-    .setName("resume")
-    .setDescription("Resume playback")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) { await interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true }); return; }
-      player.pause(false);
-      await interaction.reply({ embeds: [embed.success({ title: "Resumed." })] });
-    }));
-
-  const stopCmd = v2.createInteractionCommand()
-    .setName("stop")
-    .setDescription("Stop playback and clear queue")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) { await interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true }); return; }
-      player.queue.clear();
-      await player.destroy();
-      await interaction.reply({ embeds: [embed.success({ title: "Stopped and disconnected." })] });
-    }));
-
-  const nowCmd = v2.createInteractionCommand()
-    .setName("nowplaying")
-    .setDescription("Show the currently playing track")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      const current = player?.queue?.current;
-      if (!player || !current) {
-        await interaction.reply({ embeds: [embed.info({ title: "Nothing is playing." })], ephemeral: true });
-        return;
-      }
-      const eNow = buildTrackEmbed(current, { title: `Now playing: ${current.title}` });
-      await interaction.reply({ embeds: [eNow] });
-    }));
-
-  const queueCmd = v2.createInteractionCommand()
-    .setName("queue")
-    .setDescription("Show the queue")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) { await interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true }); return; }
-      const current = player.queue.current;
-      const upcoming = player.queue.slice(0, 25);
-      const fields = [];
-      if (current) {
-        fields.push({ name: 'Now Playing', value: `${current.title}\n${current.author} • ${formatDuration(current.duration)}`, inline: false });
-      }
-      if (upcoming.length) {
-        const list = upcoming.map((t, i) => `${i + 1}. ${t.title} — ${t.author} (${formatDuration(t.duration)})`).join('\n');
-        fields.push({ name: `Upcoming (${player.queue.totalSize - (current ? 1 : 0)})`, value: list, inline: false });
-      }
-      const total = player.queue.totalSize ?? (upcoming.length + (current ? 1 : 0));
-      const qEmbed = embed.info({ title: `Queue (${total})`, description: '\u200b', fields });
-      if (current?.artworkUrl) qEmbed.setThumbnail(current.artworkUrl);
-      await interaction.reply({ embeds: [qEmbed] });
-    }));
-
-  // Register commands and lifecycle
+  // Command builders
+  // Load command builders from separate files
   const regs = [];
-  regs.push(v2.register(playCmd, moduleName));
-  regs.push(v2.register(skipCmd, moduleName));
-  regs.push(v2.register(pauseCmd, moduleName));
-  regs.push(v2.register(resumeCmd, moduleName));
-  regs.push(v2.register(stopCmd, moduleName));
-  regs.push(v2.register(nowCmd, moduleName));
-  regs.push(v2.register(queueCmd, moduleName));
+  const cmdHelpers = { state, ensureRainlink, buildTrackEmbed, tryCreatePlayer, formatDuration, requesterLabel, logger, config, getPanelManager: () => panelManager };
+  try {
+    const playMod = await import('./commands/play.js');
+    const skipMod = await import('./commands/skip.js');
+    const pauseMod = await import('./commands/pause.js');
+    const resumeMod = await import('./commands/resume.js');
+    const stopMod = await import('./commands/stop.js');
+    const nowMod = await import('./commands/nowplaying.js');
+    const queueMod = await import('./commands/queue.js');
+
+    const joinMod = await import('./commands/join.js');
+    const leaveMod = await import('./commands/leave.js');
+    const volumeMod = await import('./commands/volume.js');
+    const seekMod = await import('./commands/seek.js');
+    const shuffleMod = await import('./commands/shuffle.js');
+    const removeMod = await import('./commands/remove.js');
+    const jumpMod = await import('./commands/jump.js');
+    const previousMod = await import('./commands/previous.js');
+    const loopMod = await import('./commands/loop.js');
+  const settingsMod = await import('./commands/settings.js');
+
+    const playCmd = playMod.default(mod, cmdHelpers);
+    const skipCmd = skipMod.default(mod, cmdHelpers);
+    const pauseCmd = pauseMod.default(mod, cmdHelpers);
+    const resumeCmd = resumeMod.default(mod, cmdHelpers);
+    const stopCmd = stopMod.default(mod, cmdHelpers);
+    const nowCmd = nowMod.default(mod, cmdHelpers);
+    const queueCmd = queueMod.default(mod, cmdHelpers);
+
+    const joinCmd = joinMod.default(mod, cmdHelpers);
+    const leaveCmd = leaveMod.default(mod, cmdHelpers);
+    const volumeCmd = volumeMod.default(mod, cmdHelpers);
+    const seekCmd = seekMod.default(mod, cmdHelpers);
+    const shuffleCmd = shuffleMod.default(mod, cmdHelpers);
+    const removeCmd = removeMod.default(mod, cmdHelpers);
+    const jumpCmd = jumpMod.default(mod, cmdHelpers);
+    const previousCmd = previousMod.default(mod, cmdHelpers);
+    const loopCmd = loopMod.default(mod, cmdHelpers);
+  const settingsCmd = settingsMod.default(mod, cmdHelpers);
+
+    regs.push(v2.register(playCmd, moduleName));
+    regs.push(v2.register(skipCmd, moduleName));
+    regs.push(v2.register(pauseCmd, moduleName));
+    regs.push(v2.register(resumeCmd, moduleName));
+    regs.push(v2.register(stopCmd, moduleName));
+    regs.push(v2.register(nowCmd, moduleName));
+    regs.push(v2.register(queueCmd, moduleName));
+
+    regs.push(v2.register(joinCmd, moduleName));
+    regs.push(v2.register(leaveCmd, moduleName));
+    regs.push(v2.register(volumeCmd, moduleName));
+    regs.push(v2.register(seekCmd, moduleName));
+    regs.push(v2.register(shuffleCmd, moduleName));
+    regs.push(v2.register(removeCmd, moduleName));
+    regs.push(v2.register(jumpCmd, moduleName));
+    regs.push(v2.register(previousCmd, moduleName));
+    regs.push(v2.register(loopCmd, moduleName));
+  regs.push(v2.register(settingsCmd, moduleName));
+  } catch (err) {
+    logger.warn('Failed to load command modules', { error: err?.message });
+  }
 
   lifecycle.addDisposable(() => { for (const off of regs) try { off?.(); } catch (err) { void err; } });
 
-  // Additional commands
-  const joinCmd = v2.createInteractionCommand()
-    .setName("join")
-    .setDescription("Join your voice channel")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const member = interaction.member;
-      const voiceChannel = member?.voice?.channel;
-      if (!voiceChannel) return interaction.reply({ embeds: [embed.error({ title: "You must be in a voice channel." })], ephemeral: true });
-      const rainlink = ensureRainlink();
-      try {
-        await tryCreatePlayer(rainlink, { guildId: interaction.guild.id, textId: interaction.channel.id, voiceId: voiceChannel.id, shardId: 0 });
-        await interaction.reply({ embeds: [embed.success({ title: "Joined voice channel." })] });
-      } catch (err) {
-        await interaction.reply({ embeds: [embed.error({ title: "Failed to join voice.", description: err?.message })], ephemeral: true });
-      }
-    }));
-
-  const leaveCmd = v2.createInteractionCommand()
-    .setName("leave")
-    .setDescription("Leave voice and destroy player")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
-      await player.destroy();
-      await interaction.reply({ embeds: [embed.success({ title: "Left voice and destroyed player." })] });
-    }));
-
-  const volumeCmd = v2.createInteractionCommand()
-    .setName("volume")
-    .setDescription("Set player volume (0-100)")
-    .addIntegerOption(opt => opt.setName("amount").setDescription("Volume 0-100").setRequired(true))
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const amt = interaction.options.getInteger("amount");
-      if (isNaN(amt) || amt < 0 || amt > 100) return interaction.reply({ embeds: [embed.error({ title: "Volume must be 0-100." })], ephemeral: true });
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
-      await player.setVolume(amt);
-      await interaction.reply({ embeds: [embed.success({ title: `Volume set to ${amt}` })] });
-    }));
-
-  const seekCmd = v2.createInteractionCommand()
-    .setName("seek")
-    .setDescription("Seek to position (ms)")
-    .addIntegerOption(opt => opt.setName("position").setDescription("Position in milliseconds").setRequired(true))
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const pos = interaction.options.getInteger("position");
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
-      try {
-        await player.seek(pos);
-        await interaction.reply({ embeds: [embed.success({ title: `Seeked to ${pos}ms` })] });
-      } catch (err) {
-        await interaction.reply({ embeds: [embed.error({ title: "Seek failed.", description: err?.message })], ephemeral: true });
-      }
-    }));
-
-  const shuffleCmd = v2.createInteractionCommand()
-    .setName("shuffle")
-    .setDescription("Shuffle the queue")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
-      player.queue.shuffle();
-      await interaction.reply({ embeds: [embed.success({ title: "Queue shuffled." })] });
-    }));
-
-  const removeCmd = v2.createInteractionCommand()
-    .setName("remove")
-    .setDescription("Remove a track from the queue by index (1-based)")
-    .addIntegerOption(opt => opt.setName("index").setDescription("1-based index").setRequired(true))
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const idx = interaction.options.getInteger("index");
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
-      try {
-        player.queue.remove(idx - 1);
-        await interaction.reply({ embeds: [embed.success({ title: `Removed track at ${idx}` })] });
-      } catch (err) {
-        await interaction.reply({ embeds: [embed.error({ title: "Remove failed.", description: err?.message })], ephemeral: true });
-      }
-    }));
-
-  const jumpCmd = v2.createInteractionCommand()
-    .setName("jump")
-    .setDescription("Jump to queue position (1-based)")
-    .addIntegerOption(opt => opt.setName("index").setDescription("1-based index").setRequired(true))
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const idx = interaction.options.getInteger("index");
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
-      try {
-        const track = player.queue[idx - 1];
-        if (!track) throw new Error('No track at that position');
-        await player.play(track, { replaceCurrent: true });
-        await interaction.reply({ embeds: [embed.success({ title: `Jumped to ${idx}: ${track.title}` })] });
-      } catch (err) {
-        await interaction.reply({ embeds: [embed.error({ title: "Jump failed.", description: err?.message })], ephemeral: true });
-      }
-    }));
-
-  const previousCmd = v2.createInteractionCommand()
-    .setName("previous")
-    .setDescription("Play previous track")
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
-      await player.previous();
-      await interaction.reply({ embeds: [embed.success({ title: "Playing previous track." })] });
-    }));
-
-  const loopCmd = v2.createInteractionCommand()
-    .setName("loop")
-    .setDescription("Set loop mode: none|song|queue")
-    .addStringOption(opt => opt.setName("mode").setDescription("none|song|queue").setRequired(true))
-    .onExecute(dsl.withTryCatch(async (interaction) => {
-      const mode = interaction.options.getString("mode");
-      const rainlink = ensureRainlink();
-      const player = rainlink.players.get(interaction.guild.id);
-      if (!player) return interaction.reply({ embeds: [embed.info({ title: "No active player." })], ephemeral: true });
-      if (!state.loopEnum) return interaction.reply({ embeds: [embed.error({ title: "Loop enum not available." })], ephemeral: true });
-      const map = { none: state.loopEnum.NONE ?? 'none', song: state.loopEnum.SONG ?? 'song', queue: state.loopEnum.QUEUE ?? 'queue' };
-      const chosen = map[mode];
-      if (!chosen) return interaction.reply({ embeds: [embed.error({ title: "Invalid loop mode." })], ephemeral: true });
-      player.setLoop(chosen);
-      await interaction.reply({ embeds: [embed.success({ title: `Loop set to ${mode}` })] });
-    }));
-
-  // Register additional commands
-  regs.push(v2.register(joinCmd, moduleName));
-  regs.push(v2.register(leaveCmd, moduleName));
-  regs.push(v2.register(volumeCmd, moduleName));
-  regs.push(v2.register(seekCmd, moduleName));
-  regs.push(v2.register(shuffleCmd, moduleName));
-  regs.push(v2.register(removeCmd, moduleName));
-  regs.push(v2.register(jumpCmd, moduleName));
-  regs.push(v2.register(previousCmd, moduleName));
-  regs.push(v2.register(loopCmd, moduleName));
+  // ... command implementations moved to individual files under ./commands
 
   return {
     name: moduleName,

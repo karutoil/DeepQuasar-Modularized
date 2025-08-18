@@ -9,7 +9,7 @@ services:
     environment:
       MONGO_INITDB_DATABASE: discord-music-bot
     ports:
-      - "127.0.0.1:27018:27018"
+      - "127.0.0.1:27017:27017"
     volumes:
       # Create named volumes for better persistence
       - mongodb_data:/data/db
@@ -38,7 +38,7 @@ services:
       # - ME_CONFIG_BASICAUTH_USERNAME=${MONGO_EXPRESS_BASICAUTH_USERNAME}
       # - ME_CONFIG_BASICAUTH_PASSWORD=${MONGO_EXPRESS_BASICAUTH_PASSWORD}
     ports:
-      - "127.0.0.1:8082:8082"
+      - "127.0.0.1:8080:8080"
     networks:
       - deepquasar-dev-network
     depends_on:
@@ -51,17 +51,17 @@ services:
     user: root  # Run as host user to fix permissions
     restart: unless-stopped
     environment:
-      - SERVER_PORT=2334
-      - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD}
+      - SERVER_PORT=2333
+      - LAVALINK_SERVER_PASSWORD=youshallnotpass
       - JAVA_OPTS=-Xmx1g -Xms512m
         # Environment variables for application.yml substitution
-      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD}
+      - LAVALINK_PASSWORD=youshallnotpass
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
       - YOUTUBE_REFRESH_TOKEN=${YOUTUBE_REFRESH_TOKEN:-}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
-      - "127.0.0.1:2334:2334"
+      - "127.0.0.1:2333:2333"
     volumes:
       # Link Lavalink config and plugins directly to host filesystem
       - ./lavalink/application.yml:/opt/Lavalink/application.yml:rw
@@ -70,7 +70,7 @@ services:
     networks:
       - deepquasar-dev-network
     healthcheck:
-      test: ["CMD-SHELL", "wget --header=\"Authorization: ${LAVALINK_PASSWORD}\" --no-verbose --spider http://localhost:2334/v4/stats"]
+      test: ["CMD-SHELL", "wget --header=\"Authorization: youshallnotpass\" --no-verbose --spider http://localhost:2334/v4/stats"]
       interval: 10s
       timeout: 5s
       retries: 10
