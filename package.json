@@ -48,6 +48,7 @@
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
     "pdf-parse": "^1.1.1",
+    "pm2": "^6.0.13",
     "rainlink": "^1.2.7",
     "spotify-web-api-node": "^5.0.2",
     "timezones-list": "^3.1.0",
